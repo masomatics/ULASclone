@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    k8s.pfn.io/gpu-sharing: ""
+  labels:
+    k8s.pfn.io/activity-code: "5210"
+  name: ulas
+spec:
+  securityContext:
+    supplementalGroups:
+      - 51000 # fulltime group
+      - 50032 # nozomi vision
+  priorityClassName: "low"
+  restartPolicy: Never
+  containers:
+    - name: jupyter
+      image: asia-northeast1-docker.pkg.dev/pfn-artifactregistry/prj-7andi-analysis/masomatics
+      command: ["/bin/sh", "-c"]
+      args: ["pip install einops && cd /mnt/vol21/masomatics && jupyter notebook --no-browser --NotebookApp.token=''"]
+      # args: ["sleep infinity"]
+      resources:
+        limits:
+          nvidia.com/gpu: 2
+          memory: "32Gi"
+          cpu: 4
+        requests:
+          nvidia.com/gpu: 2
+          memory: "32Gi"
+          cpu: 4
+      env:
+        - name: KRB5_CONFIG
+          value: /etc/config/krb5.conf
+        - name: KRB5CCNAME
+          value: /krb5cc/krb5cc_masomatics
+        - name: KRB5PRINCIPAL
+          value: masomatics
+        - name: PYTHONPATH
+          value: "."
+        - name: MKL_NUM_THREADS
+          value: "1"
+        - name: OMP_NUM_THREADS
+          value: "1"
+        - name: NUMEXPR_NUM_THREADS
+          value: "1"
+#        - name: AWS_SECRET_ACCESS_KEY
+#          valueFrom:
+#            secretKeyRef:
+#              name: aws-seven-athena
+#              key: AWS_SECRET_ACCESS_KEY
+#              # optional: true
+#        - name: AWS_SECRET_KEY_ID
+#          valueFrom:
+#            secretKeyRef:
+#              name: aws-seven-athena
+#              key: AWS_SECRET_KEY_ID
+              # optional: true
+      volumeMounts:
+        - mountPath: /mnt/vol21
+          name: vol21
+        - mountPath: /mnt/nfs-mnj-hot-01
+          name: nfs-mnj-hot-01
+        - mountPath: /mnt/nfs-mnj-hot-02
+          name: nfs-mnj-hot-02
+        - mountPath: /mnt/nfs-mnj-archive-02
+          name: nfs-mnj-archive-02
+        - mountPath: /mnt/nfs-mnj-archive-03
+          name: nfs-mnj-archive-03
+        - mountPath: /mnt/nvme0n1/scratch
+          name: local-scratch
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /etc/config
+          name: config
+          readOnly: true
+        - mountPath: /krb5cc
+          name: krb5cc
+        - name: mysql-001
+          mountPath: /etc/mysql-001
+      ports:
+        - containerPort: 8889
+  volumes:
+    - hostPath:
+        path: /mnt/vol21
+      name: vol21
+    - hostPath:
+        path: /mnt/nfs-mnj-hot-01
+      name: nfs-mnj-hot-01
+    - hostPath:
+        path: /mnt/nfs-mnj-hot-02
+      name: nfs-mnj-hot-02
+    - hostPath:
+        path: /mnt/nfs-mnj-archive-02
+      name: nfs-mnj-archive-02
+    - hostPath:
+        path: /mnt/nfs-mnj-archive-03
+      name: nfs-mnj-archive-03
+    - hostPath:
+        path: /mnt/nvme0n1/scratch
+      name: local-scratch
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1024Mi
+    - name: mysql-001
+      secret:
+        secretName: mysql-001
+    - emptyDir: {}
+      name: config
+    - emptyDir: {}
+      name: krb5cc

@@ -1,0 +1,36 @@
+batchsize: 32
+seed: 1
+max_iteration: 10000
+report_freq: 1000
+model_snapshot_freq: 10000
+manager_snapshot_freq: 1000
+num_workers: 2
+T_cond: 5
+lr: 0.001
+
+train_data:
+  fn: ./datasets/so3_data.py
+  name: SO3rotationSequence
+  args:
+    #root: /tmp/datasets/MNIST
+    data_filename: so3dat_sphere_Linear.pt
+    train: True
+    T: 8 and 10
+
+model:
+  fn: ./models/seqae.py
+  name: SeqAELSTSQ_LinearNet
+  args:
+    dim_m: 10
+    dim_a: 6
+    predictive: True
+
+training_loop:
+  fn: ./training_loops.py
+  name: loop_seqmodel
+  args:
+    lr_decay_iter: 40000
+    reconst_iter: 0
+
+
+
