@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch import nn
-from models.base_networks import MLP_iResNet, LinearNet
+from models.base_networks import MLP_iResNet, LinearNet, MLP
 from torch.utils.data import DataLoader
 import pickle
 import pdb
@@ -69,6 +69,7 @@ def create_dataset(embed_fxn_mode='Identity',
                    save_datapath='so3',
                    video_length=15,
                    match_dimen=False,
+                   shared_transition=False,
                    ):
     latent_data = torch.tensor(
         np.random.normal(size=(datsize, num_blocks*latent_dimen, tensor_dim)))
@@ -85,15 +86,25 @@ def create_dataset(embed_fxn_mode='Identity',
         embed_fxn = lambda x: x
     elif embed_fxn_mode == 'iResNet':
         embed_fxn = MLP_iResNet(in_dim=3*num_blocks*tensor_dim)
-        if len(embedding_path) > 0:
-            embed_dict = torch.load(embedding_path)['state_dict']
-            embed_fxn.load_state_dict(embed_dict, strict=False)
+
     elif embed_fxn_mode == 'Linear':
-        indim= 3 *num_blocks*tensor_dim
-        outdim = 2* 3*num_blocks*tensor_dim
+        indim= 3 * num_blocks*tensor_dim
+        outdim = 3 * num_blocks*tensor_dim
         embed_fxn = LinearNet(in_dim=indim, out_dim=outdim)
+
+    elif embed_fxn_mode == 'MLP':
+        indim= 3 * num_blocks*tensor_dim
+        outdim = 3* num_blocks*tensor_dim
+        embed_fxn = MLP(in_dim=indim,
+                        out_dim=outdim)
     else:
         raise NotImplementedError
+
+    if len(embedding_path) > 0:
+        embed_dict = torch.load(embedding_path)['state_dict']
+        embed_fxn.load_state_dict(embed_dict, strict=False)
+    else:
+        pass
 
     train_loader = DataLoader(
         latent_data, batch_size=1, shuffle=False,
@@ -102,18 +113,21 @@ def create_dataset(embed_fxn_mode='Identity',
     dataset = []
     trans_params = []
     for idx, latent_vec in enumerate(train_loader):
+        #if shared_transition == True:
+
+
         latent_video, trans_param = create_latent_video(latent_vec[0],
                                            num_blocks,
                                            max_rot_speed,
                                            max_scale_speed,
                                            video_length)
         so3_video = embed_fxn(latent_video).detach()
-        if match_dimen == True:
-            so3_video = rearrange(so3_video, 'b w -> b 1 1 w')
+        # if match_dimen == True:
+        #     so3_video = rearrange(so3_video, 'b w -> b 1 1 w')
         dataset.append(so3_video)
         trans_params.append(trans_param)
         if idx % 1000 == 0:
-            print(f"{idx} videos processed.")
+            print(f"""{idx} videos processed.""")
 
     dataset = torch.stack(dataset)
 
@@ -125,12 +139,14 @@ def create_dataset(embed_fxn_mode='Identity',
 
 
     torch.save(dataset_with_label, data_save_path)
-    if type(embed_fxn) == nn.Module:
-        torch.save(embed_fxn.state_dict(), model_save_path)
+    #if type(embed_fxn) == nn.Module:
+    torch.save(embed_fxn.state_dict(), model_save_path)
     #torch.save(trans_params, trans_save_path)
 
 
-    print(f"dataset saved at {data_save_path}")
+    print(f"""dataset saved at {data_save_path}""")
+    print(f"""MODEL saved at {model_save_path}""")
+
 
 
 def create_latent_video(latent_vec,

@@ -147,12 +147,13 @@ class SeqAELSTSQ_so3Net(SeqAELSTSQ):
             dim_a,
             dim_m,
             **kwargs):
-        super().__init__(dim_a,
-                         dim_m,
-                         **kwargs)
+        super(SeqAELSTSQ).__init__(self,
+                                   dim_a,
+                                   dim_m,
+                                   **kwargs)
 
-        self.enc = MLP(in_dim=dim_a * dim_m)
-        self.dec = MLP(in_dim=dim_a * dim_m)
+        self.enc = MLP(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
+        self.dec = MLP(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
 
     #No sigmoid. ALso, match the dimension of the pred
     def loss(self, xs,
@@ -185,29 +186,29 @@ class SeqAELSTSQ_iResNet(SeqAELSTSQ_so3Net):
             dim_a,
             dim_m,
             **kwargs):
-        super().__init__(dim_a,
+        super(SeqAELSTSQ_so3Net).__init__(self, dim_a,
                          dim_m,
                          **kwargs)
 
-        self.enc = MLP_iResNet(in_dim=dim_a * dim_m)
-        self.dec = MLP_iResNet(in_dim=dim_a * dim_m)
+        self.enc = MLP_iResNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
+        self.dec = MLP_iResNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
 
 
 
 #iResNet class for So3 use
-class SeqAELSTSQ_LinearNet(SeqAELSTSQ_iResNet):
+class SeqAELSTSQ_LinearNet(SeqAELSTSQ_so3Net):
 
     def __init__(
             self,
             dim_a,
             dim_m,
             **kwargs):
-        super().__init__(dim_a,
+        super(SeqAELSTSQ_so3Net).__init__(self, dim_a,
                          dim_m,
                          **kwargs)
 
-        self.enc = LinearNet(in_dim=2 * dim_a * dim_m, out_dim=dim_a * dim_m)
-        self.dec = LinearNet(in_dim=dim_a * dim_m, out_dim=2 * dim_a * dim_m)
+        self.enc = LinearNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
+        self.dec = LinearNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
 
 
 class SeqAEHOLSTSQ(SeqAELSTSQ):
