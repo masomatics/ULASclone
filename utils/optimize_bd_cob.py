@@ -3,6 +3,21 @@ import torch.nn as nn
 from einops import repeat
 from utils.laplacian import tracenorm_of_normalized_laplacian, make_identity_like
 
+  
+class ChangeOfBasis(torch.nn.Module):
+    def __init__(self, d, Pmat=torch.tensor([])):
+        super().__init__()
+        if len(Pmat) > 0:
+            self.U = nn.Parameter(Pmat)
+        else:
+            self.U = nn.Parameter(torch.empty(d, d))
+        torch.nn.init.orthogonal_(self.U)
+
+    def __call__(self, mat):
+        _U = repeat(self.U, "a1 a2 -> n a1 a2", n=mat.shape[0])
+        n_mat = torch.linalg.solve(_U, mat) @ _U
+        return n_mat
+
 
 def optimize_bd_cob(mats,
                     batchsize=32,
@@ -11,16 +26,6 @@ def optimize_bd_cob(mats,
                     verbose=False):
     # Optimize change of basis matrix U by minimizing block diagonalization loss
 
-    class ChangeOfBasis(torch.nn.Module):
-        def __init__(self, d):
-            super().__init__()
-            self.U = nn.Parameter(torch.empty(d, d))
-            torch.nn.init.orthogonal_(self.U)
-
-        def __call__(self, mat):
-            _U = repeat(self.U, "a1 a2 -> n a1 a2", n=mat.shape[0])
-            n_mat = torch.linalg.solve(_U, mat) @ _U
-            return n_mat
 
     change_of_basis = ChangeOfBasis(mats.shape[-1]).to(mats.device)
     dataloader = torch.utils.data.DataLoader(

@@ -106,7 +106,7 @@ class SeqAELSTSQ(nn.Module):
         # Encoded Latent. Num_ts x len_ts x  dim_m x dim_a
         H = self.encode(xs_cond)
 
-        # ==Esitmate dynamics==
+        # ==Esitmate dynamics==  M IS APPLIED HERE
         ret = self.dynamics_model(
             H, return_loss=return_reg_loss, fix_indices=fix_indices)
         if return_reg_loss:
@@ -147,10 +147,8 @@ class SeqAELSTSQ_so3Net(SeqAELSTSQ):
             dim_a,
             dim_m,
             **kwargs):
-        super(SeqAELSTSQ).__init__(self,
-                                   dim_a,
-                                   dim_m,
-                                   **kwargs)
+
+        super().__init__(dim_a, dim_m, **kwargs)
 
         self.enc = MLP(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
         self.dec = MLP(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
@@ -186,9 +184,7 @@ class SeqAELSTSQ_iResNet(SeqAELSTSQ_so3Net):
             dim_a,
             dim_m,
             **kwargs):
-        super(SeqAELSTSQ_so3Net).__init__(self, dim_a,
-                         dim_m,
-                         **kwargs)
+        super().__init__(dim_a, dim_m,**kwargs)
 
         self.enc = MLP_iResNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
         self.dec = MLP_iResNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
@@ -203,9 +199,7 @@ class SeqAELSTSQ_LinearNet(SeqAELSTSQ_so3Net):
             dim_a,
             dim_m,
             **kwargs):
-        super(SeqAELSTSQ_so3Net).__init__(self, dim_a,
-                         dim_m,
-                         **kwargs)
+        super().__init__(dim_a,dim_m, **kwargs)
 
         self.enc = LinearNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
         self.dec = LinearNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
