@@ -1,12 +1,12 @@
 batchsize: 32
 seed: 1
-max_iteration: 100000
+max_iteration: 300000
 report_freq: 1000
-model_snapshot_freq: 50000
+model_snapshot_freq: 300000
 manager_snapshot_freq: 1000
 num_workers: 2
 T_cond: 5
-lr: 0.01 and 0.001 and 0.0001
+lr: 0.001 and 0.0001
 
 
 train_data:
@@ -32,7 +32,7 @@ training_loop:
   fn: ./training_loops.py
   name: loop_seqmodel
   args:
-    lr_decay_iter: 40000
+    lr_decay_iter: 250000
     reconst_iter: 0
 
 

@@ -114,18 +114,24 @@ class LinearNet(nn.Module):
 class MLP(nn.Module):
     def __init__(self, in_dim=2, out_dim=3,
                  num_layer=3,
-                 activation=nn.Sigmoid, **kwargs):
+                 activation=nn.ELU, **kwargs):
         super(MLP, self).__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
-
         self.layers = []
         for k in range(num_layer):
-            self.layers.append(nn.Linear(in_features=self.in_dim,
-                                         out_features=self.in_dim))
+            linlayer = nn.Linear(in_features=self.in_dim,
+                                         out_features=self.in_dim)
+            nn.init.orthogonal_(linlayer.weight.data)
+            nn.init.uniform_(linlayer.bias.data)
+
+            self.layers.append(linlayer)
             self.layers.append(activation())
-        self.layers.append(nn.Linear(in_features=self.in_dim,
-                                         out_features=self.out_dim))
+        linlayer = nn.Linear(in_features=self.in_dim,
+                                         out_features=self.out_dim)
+        nn.init.orthogonal_(linlayer.weight.data)
+        nn.init.uniform_(linlayer.bias.data)
+        self.layers.append(linlayer)
 
         self.network = nn.Sequential(*self.layers)
 

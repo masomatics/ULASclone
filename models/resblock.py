@@ -154,7 +154,7 @@ class Conv1d1x1Block(nn.Module):
 Invertible Resblock 
 '''
 class Invertible_Resblock_Fc(nn.Module):
-    def __init__(self, in_dim, nonlin='elu', n_power_iter=2,
+    def __init__(self, in_dim, nonlin='sigmoid', n_power_iter=3,
                  lip_const=0.97):
         super(Invertible_Resblock_Fc, self).__init__()
         self.in_dim = in_dim
@@ -167,13 +167,17 @@ class Invertible_Resblock_Fc(nn.Module):
             "relu": nn.ReLU,
             "elu": nn.ELU,
             "softplus": nn.Softplus,
+            "sigmoid":nn.Sigmoid
         }[nonlin]
 
         layers = []
         for k in range(self.num_layers):
             if k > 0:
                 layers.append(nonlin())
-            layers.append(self._wraper_spectral_norm(nn.Linear(self.in_dim, self.in_dim)))
+            linlayer = nn.Linear(self.in_dim, self.in_dim)
+            nn.init.orthogonal_(linlayer.weight.data)
+            nn.init.uniform_(linlayer.bias.data)
+            layers.append(self._wraper_spectral_norm(linlayer))
         self.bottleneck_block = nn.Sequential(*layers)
 
     def forward(self, x):

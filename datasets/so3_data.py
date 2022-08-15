@@ -7,6 +7,7 @@ import pickle
 import pdb
 import os
 from einops import rearrange
+import argparse
 
 
 #dataset root
@@ -70,7 +71,10 @@ def create_dataset(embed_fxn_mode='Identity',
                    video_length=15,
                    match_dimen=False,
                    shared_transition=False,
+                   seed=0
                    ):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
     latent_data = torch.tensor(
         np.random.normal(size=(datsize, num_blocks*latent_dimen, tensor_dim)))
     if latent_mode == 'ResNet':
@@ -94,53 +98,62 @@ def create_dataset(embed_fxn_mode='Identity',
 
     elif embed_fxn_mode == 'MLP':
         indim= 3 * num_blocks*tensor_dim
-        outdim = 3* num_blocks*tensor_dim
+        outdim = 3 * num_blocks*tensor_dim
         embed_fxn = MLP(in_dim=indim,
                         out_dim=outdim)
     else:
         raise NotImplementedError
 
     if len(embedding_path) > 0:
-        embed_dict = torch.load(embedding_path)['state_dict']
+        embed_dict = torch.load(embedding_path)
         embed_fxn.load_state_dict(embed_dict, strict=False)
+        print(f"""{embedding_path} successfully loaded.""")
     else:
-        pass
+        pdb.set_trace()
+        print("creating a new embedding model.")
 
     train_loader = DataLoader(
         latent_data, batch_size=1, shuffle=False,
         num_workers=2)
 
     dataset = []
+    latent_dataset = []
     trans_params = []
+    trans_param_shared = random_trans_param(num_blocks, max_rot_speed, max_scale_speed)
+
+    addendum = '_shared_trans' if shared_transition == True else ''
+
     for idx, latent_vec in enumerate(train_loader):
-        #if shared_transition == True:
+        if shared_transition == True:
+            trans_param = trans_param_shared
+        else:
+            trans_param = random_trans_param(num_blocks, max_rot_speed,
+                                             max_scale_speed)
+        latent_video = create_video_from_trans_param(latent_vec[0], video_length, trans_param)
 
-
-        latent_video, trans_param = create_latent_video(latent_vec[0],
-                                           num_blocks,
-                                           max_rot_speed,
-                                           max_scale_speed,
-                                           video_length)
         so3_video = embed_fxn(latent_video).detach()
         # if match_dimen == True:
         #     so3_video = rearrange(so3_video, 'b w -> b 1 1 w')
         dataset.append(so3_video)
+        latent_dataset.append(latent_video)
+
         trans_params.append(trans_param)
         if idx % 1000 == 0:
             print(f"""{idx} videos processed.""")
 
     dataset = torch.stack(dataset)
+    latent_dataset = torch.stack(latent_dataset)
 
-    dataset_with_label = {'data': dataset, 'trans':trans_params}
+    dataset_with_label = {'data': dataset, 'trans':trans_params, 'latent':latent_dataset}
 
-    data_save_path = os.path.join(dat_root, save_datapath , f"""so3dat_{latent_mode}_{embed_fxn_mode}.pt""")
-    #trans_save_path = os.path.join(dat_root, save_datapath , f"""so3dat_{latent_mode}_{embed_fxn_mode}_trans.pt""")
-    model_save_path = os.path.join(dat_root, save_datapath , f"""so3dat_{latent_mode}_{embed_fxn_mode}_model.pt""")
+    data_save_path = os.path.join(dat_root, save_datapath , f"""so3dat_{latent_mode}_{embed_fxn_mode}{addendum}.pt""")
+    model_save_path = os.path.join(dat_root, save_datapath , f"""so3dat_{latent_mode}_{embed_fxn_mode}{addendum}_model.pt""")
 
 
     torch.save(dataset_with_label, data_save_path)
     #if type(embed_fxn) == nn.Module:
-    torch.save(embed_fxn.state_dict(), model_save_path)
+    if len(embedding_path) == 0:
+        torch.save(embed_fxn.state_dict(), model_save_path)
     #torch.save(trans_params, trans_save_path)
 
 
@@ -148,28 +161,33 @@ def create_dataset(embed_fxn_mode='Identity',
     print(f"""MODEL saved at {model_save_path}""")
 
 
-
-def create_latent_video(latent_vec,
-                        num_blocks,
-                        max_rot_speed,
-                        max_scale_speed,
-                        T):
-
+def random_trans_param(num_blocks, max_rot_speed, max_scale_speed):
     trans_param = {}
     blocks = []
     for k in range(num_blocks):
-        rot_angle = torch.tensor(np.random.uniform(0, 2 * max_rot_speed, size=1))
+        rot_angle = torch.tensor(
+            np.random.uniform(0, 2 * max_rot_speed, size=1))
         rot_axis = torch.tensor(np.random.uniform(0, 1, size=3))
-        rot_axis = rot_axis /torch.sqrt(torch.sum(rot_axis**2))
+        rot_axis = rot_axis / torch.sqrt(torch.sum(rot_axis ** 2))
         blocks.append({'angle': rot_angle, 'axis': rot_axis})
 
     scale_speed = np.random.uniform(-max_scale_speed, max_scale_speed)
 
     trans_param['blocks'] = blocks
     trans_param['scale_speed'] = scale_speed
-    latent_video = create_video_from_trans_param(latent_vec, T, trans_param)
+    return trans_param
 
-    return latent_video, trans_param
+
+# def create_latent_video(latent_vec,
+#                         num_blocks,
+#                         max_rot_speed,
+#                         max_scale_speed,
+#                         T):
+#
+#     trans_param = random_trans_param(num_blocks, max_rot_speed, max_scale_speed)
+#     latent_video = create_video_from_trans_param(latent_vec, T, trans_param)
+#
+#     return latent_video, trans_param
 
 def create_video_from_trans_param(latent_vec, T, trans_param):
     blocks = trans_param['blocks']
@@ -192,7 +210,38 @@ def create_video_from_trans_param(latent_vec, T, trans_param):
 
 
 
+if __name__ == '__main__':
+    # Loading the configuration arguments from specified config path
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-e', '--embed')
+    parser.add_argument('-s', '--size', default=10000)
+    parser.add_argument('-t', '--shared', type=int, default=0)
+    parser.add_argument('-w', '--warning', action='store_true')
+    args = parser.parse_args()
+    datamode = 'so3'
 
+
+    embedding_filename = f"""so3dat_sphere_{args.embed}_model.pt"""
+    embedding_path = os.path.join(dat_root, datamode, embedding_filename)
+
+    if not os.path.exists(embedding_path):
+        embedding_path = ''
+
+    create_dataset(embed_fxn_mode=args.embed,
+                   latent_dimen=3,
+                   tensor_dim=10,
+                   latent_mode='sphere',
+                   max_rot_speed=0.8,
+                   max_scale_speed=0,
+                   datsize=args.size,
+                   num_blocks=2,
+                   embedding_path=embedding_path,
+                   save_datapath=datamode,
+                   video_length=15,
+                   match_dimen=False,
+                   shared_transition=args.shared,
+                   seed=0
+                   )
 
 
 
