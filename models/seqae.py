@@ -186,8 +186,8 @@ class SeqAELSTSQ_iResNet(SeqAELSTSQ_so3Net):
             **kwargs):
         super().__init__(dim_a, dim_m,**kwargs)
 
-        self.enc = MLP_iResNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
-        self.dec = MLP_iResNet(in_dim=dim_a * dim_m, out_dim=dim_a * dim_m)
+        self.enc = MLP_iResNet(in_dim=dim_a * dim_m)
+        self.dec = MLP_iResNet(in_dim=dim_a * dim_m)
 
 
 

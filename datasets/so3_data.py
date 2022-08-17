@@ -23,6 +23,10 @@ def rodrigues_rotation(w, theta):
     R = torch.eye(3) + torch.sin(theta)*bw + (1- torch.cos(theta)) * torch.matmul(bw, bw)
     return R
 
+def two_d_rotation(theta):
+    R  = torch.tensor([[torch.cos(theta), -torch.sin(theta)], [torch.sin(theta), torch.cos(theta)]] )
+    return R
+
 
 
 class SO3rotationSequence():
@@ -34,13 +38,14 @@ class SO3rotationSequence():
             T=3,
             data_filename='so3dat_sphere_iResNet.pt',
             provide_label=False,
+            datamode= 'so3',
             **kwargs):
 
         self.T = T
         self.T_max = 20
         self.mode = 'train' if train == True else 'test'
         #number of distinct so3 rotations
-        data_path = os.path.join(dat_root, 'so3', data_filename)
+        data_path = os.path.join(dat_root, datamode, data_filename)
 
         data_with_labels = torch.load(data_path)
         self.data = data_with_labels['data']
@@ -59,7 +64,6 @@ class SO3rotationSequence():
 
 
 def create_dataset(embed_fxn_mode='Identity',
-                   latent_dimen=3,
                    tensor_dim=10,
                    latent_mode='sphere',
                    max_rot_speed=0.8,
@@ -69,48 +73,65 @@ def create_dataset(embed_fxn_mode='Identity',
                    embedding_path='',
                    save_datapath='so3',
                    video_length=15,
-                   match_dimen=False,
                    shared_transition=False,
+                   recreate_model=False,
                    seed=0
                    ):
     torch.manual_seed(seed)
     np.random.seed(seed)
+
+
+    datamode=save_datapath
+    datpath = os.path.join(dat_root, datamode)
+    if os.path.exists(datpath) == False:  os.mkdir(datpath)
+
+    if datamode == 'so3':
+        latent_dimen = 3
+    elif datamode == 'so2':
+        latent_dimen = 2
+    else:
+        raise NotImplementedError
+
+    #creation of latent_data
     latent_data = torch.tensor(
-        np.random.normal(size=(datsize, num_blocks*latent_dimen, tensor_dim)))
+        np.random.normal(size=(datsize, tensor_dim, num_blocks*latent_dimen)))
     if latent_mode == 'ResNet':
         pass
     elif latent_mode == 'sphere':
         for pos in range(num_blocks):
-            norms = torch.sqrt(torch.sum(latent_data[:,3*pos:3*(pos+1),:]**2, axis=1, keepdims=True))
-            latent_data[:,3*pos:3*(pos+1),:] = latent_data[:,3*pos:3*(pos+1),:] / norms
+            norms = torch.sqrt(torch.sum(latent_data[:,:,latent_dimen*pos:latent_dimen*(pos+1)]**2, axis=2, keepdims=True))
+            latent_data[:,:,latent_dimen*pos:latent_dimen*(pos+1)] = latent_data[:,:,latent_dimen*pos:latent_dimen*(pos+1)] / norms
     else:
         raise NotImplementedError
 
     if embed_fxn_mode == 'Identity':
         embed_fxn = lambda x: x
     elif embed_fxn_mode == 'iResNet':
-        embed_fxn = MLP_iResNet(in_dim=3*num_blocks*tensor_dim)
+        indim = latent_dimen*num_blocks*tensor_dim
+        embed_fxn = MLP_iResNet(in_dim=indim)
 
     elif embed_fxn_mode == 'Linear':
-        indim= 3 * num_blocks*tensor_dim
-        outdim = 3 * num_blocks*tensor_dim
+        indim= latent_dimen * num_blocks*tensor_dim
+        outdim = latent_dimen * num_blocks*tensor_dim
         embed_fxn = LinearNet(in_dim=indim, out_dim=outdim)
 
     elif embed_fxn_mode == 'MLP':
-        indim= 3 * num_blocks*tensor_dim
-        outdim = 3 * num_blocks*tensor_dim
+        indim= latent_dimen * num_blocks*tensor_dim
+        outdim = latent_dimen * num_blocks*tensor_dim
         embed_fxn = MLP(in_dim=indim,
                         out_dim=outdim)
     else:
         raise NotImplementedError
 
-    if len(embedding_path) > 0:
+    if len(embedding_path) > 0 and recreate_model == False:
         embed_dict = torch.load(embedding_path)
         embed_fxn.load_state_dict(embed_dict, strict=False)
         print(f"""{embedding_path} successfully loaded.""")
-    else:
-        pdb.set_trace()
+    elif recreate_model == True:
         print("creating a new embedding model.")
+    else:
+        print(f"""{embedding_path} does not exist.""")
+        raise NotImplementedError
 
     train_loader = DataLoader(
         latent_data, batch_size=1, shuffle=False,
@@ -119,7 +140,7 @@ def create_dataset(embed_fxn_mode='Identity',
     dataset = []
     latent_dataset = []
     trans_params = []
-    trans_param_shared = random_trans_param(num_blocks, max_rot_speed, max_scale_speed)
+    trans_param_shared = random_trans_param(num_blocks, max_rot_speed, max_scale_speed, datamode)
 
     addendum = '_shared_trans' if shared_transition == True else ''
 
@@ -128,16 +149,18 @@ def create_dataset(embed_fxn_mode='Identity',
             trans_param = trans_param_shared
         else:
             trans_param = random_trans_param(num_blocks, max_rot_speed,
-                                             max_scale_speed)
-        latent_video = create_video_from_trans_param(latent_vec[0], video_length, trans_param)
+                                             max_scale_speed, datamode=datamode)
+        latent_video, trans_mats = create_video_from_trans_param(latent_vec[0], video_length, trans_param,
+                                                                 datamode=datamode)
 
-        so3_video = embed_fxn(latent_video).detach()
+        latent_video_input = rearrange(latent_video, 't d_s d_a -> t (d_s d_a)')
+        so3_video = embed_fxn(latent_video_input).detach()
         # if match_dimen == True:
         #     so3_video = rearrange(so3_video, 'b w -> b 1 1 w')
         dataset.append(so3_video)
         latent_dataset.append(latent_video)
 
-        trans_params.append(trans_param)
+        trans_params.append(trans_mats)
         if idx % 1000 == 0:
             print(f"""{idx} videos processed.""")
 
@@ -146,65 +169,82 @@ def create_dataset(embed_fxn_mode='Identity',
 
     dataset_with_label = {'data': dataset, 'trans':trans_params, 'latent':latent_dataset}
 
-    data_save_path = os.path.join(dat_root, save_datapath , f"""so3dat_{latent_mode}_{embed_fxn_mode}{addendum}.pt""")
-    model_save_path = os.path.join(dat_root, save_datapath , f"""so3dat_{latent_mode}_{embed_fxn_mode}{addendum}_model.pt""")
+    data_save_path = os.path.join(datpath, f"""{datamode}dat_{latent_mode}_{embed_fxn_mode}{addendum}.pt""")
+    model_save_path = os.path.join(datpath, f"""{datamode}dat_{latent_mode}_{embed_fxn_mode}{addendum}_model.pt""")
 
 
     torch.save(dataset_with_label, data_save_path)
     #if type(embed_fxn) == nn.Module:
-    if len(embedding_path) == 0:
+    if len(embedding_path) == 0 or recreate_model==True:
         torch.save(embed_fxn.state_dict(), model_save_path)
+        print(f"""MODEL saved at {model_save_path}""")
+
     #torch.save(trans_params, trans_save_path)
 
 
     print(f"""dataset saved at {data_save_path}""")
-    print(f"""MODEL saved at {model_save_path}""")
 
 
-def random_trans_param(num_blocks, max_rot_speed, max_scale_speed):
+def random_trans_param(num_blocks, max_rot_speed, max_scale_speed,
+                       datamode = 'so3'):
     trans_param = {}
-    blocks = []
-    for k in range(num_blocks):
-        rot_angle = torch.tensor(
-            np.random.uniform(0, 2 * max_rot_speed, size=1))
-        rot_axis = torch.tensor(np.random.uniform(0, 1, size=3))
-        rot_axis = rot_axis / torch.sqrt(torch.sum(rot_axis ** 2))
-        blocks.append({'angle': rot_angle, 'axis': rot_axis})
+    if datamode == 'so3':
+        blocks = []
+        for k in range(num_blocks):
+            rot_angle = torch.tensor(
+                np.random.uniform(0, np.pi/2. * max_rot_speed, size=1))
+            rot_axis = torch.tensor(np.random.uniform(0, 1, size=3))
+            rot_axis = rot_axis / torch.sqrt(torch.sum(rot_axis ** 2))
+            blocks.append({'angle': rot_angle, 'axis': rot_axis})
 
-    scale_speed = np.random.uniform(-max_scale_speed, max_scale_speed)
+        scale_speed = np.random.uniform(-max_scale_speed, max_scale_speed)
 
-    trans_param['blocks'] = blocks
-    trans_param['scale_speed'] = scale_speed
+        trans_param['blocks'] = blocks
+        trans_param['scale_speed'] = scale_speed
+    elif datamode == 'so2':
+        blocks = []
+        for k in range(num_blocks):
+            rot_angle = torch.tensor(
+                np.random.uniform(0, np.pi/2. * max_rot_speed, size=1))
+            blocks.append(rot_angle)
+        trans_param['blocks'] = blocks
+    else:
+        raise NotImplementedError
+
     return trans_param
 
 
-# def create_latent_video(latent_vec,
-#                         num_blocks,
-#                         max_rot_speed,
-#                         max_scale_speed,
-#                         T):
-#
-#     trans_param = random_trans_param(num_blocks, max_rot_speed, max_scale_speed)
-#     latent_video = create_video_from_trans_param(latent_vec, T, trans_param)
-#
-#     return latent_video, trans_param
-
-def create_video_from_trans_param(latent_vec, T, trans_param):
+def create_video_from_trans_param(latent_vec, T, trans_param, datamode='so3'):
     blocks = trans_param['blocks']
-    scale_speed = trans_param['scale_speed']
     num_blocks = len(blocks)
 
     latent_outputs = []
-    scale = scale_speed + 1
+    trans_mats  = []
+    dim = latent_vec.shape[1]
     for t in range(T):
-        v_t = np.zeros(latent_vec.shape)
-        for k in range(num_blocks):
-            rodrigues_mat = rodrigues_rotation(blocks[k]['axis'], t * blocks[k]['angle'])
-            v_t[(k*3):(k+1)*3, :] = scale * np.dot(rodrigues_mat, latent_vec[(k*3):(k+1)*3, :]).astype(np.float32)
-        v_t = torch.tensor(v_t)
+        block_diag_mat = torch.zeros([dim, dim]).float()
+        if datamode == 'so3':
+            #scale_speed = trans_param['scale_speed']
+            #scale = float(scale_speed + 1)
+
+            #v_t = torch.zeros(latent_vec.shape)
+            for k in range(num_blocks):
+                rodrigues_mat = torch.tensor(rodrigues_rotation(blocks[k]['axis'], t * blocks[k]['angle']))
+                block_diag_mat[(k*3):(k+1)*3, (k*3):(k+1)*3] = rodrigues_mat.float()
+        elif datamode == 'so2':
+            for k in range(num_blocks):
+                rotation_matrix = torch.tensor(two_d_rotation(t * blocks[k]))
+                block_diag_mat[(k*2):(k+1)*2, (k*2):(k+1)*2] = rotation_matrix.float()
+        else:
+            raise NotImplementedError
+        v_t = (latent_vec.float() @ block_diag_mat).float()
+
         latent_outputs.append(v_t)
+        trans_mats.append(block_diag_mat)
     latent_video = torch.stack(latent_outputs).float()
-    return latent_video
+    mats_video = torch.stack(trans_mats).float()
+
+    return latent_video, mats_video
 
 
 
@@ -214,33 +254,38 @@ if __name__ == '__main__':
     # Loading the configuration arguments from specified config path
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--embed')
-    parser.add_argument('-s', '--size', default=10000)
+    parser.add_argument('-s', '--size', type=int, default=10000)
     parser.add_argument('-t', '--shared', type=int, default=0)
     parser.add_argument('-w', '--warning', action='store_true')
+    parser.add_argument('-d', '--datamode', default='so3')
+    parser.add_argument('-nb', '--num_blocks', type=int, default=2)
+    parser.add_argument('-r', '--recreate', type=int, default=0)
+
+
+
     args = parser.parse_args()
-    datamode = 'so3'
+    #datamode = 'so3'
 
 
-    embedding_filename = f"""so3dat_sphere_{args.embed}_model.pt"""
-    embedding_path = os.path.join(dat_root, datamode, embedding_filename)
+    embedding_filename = f"""{args.datamode}dat_sphere_{args.embed}_model.pt"""
+    embedding_path = os.path.join(dat_root, args.datamode, embedding_filename)
 
     if not os.path.exists(embedding_path):
+        print(f"""{embedding_path} does not exist. This will be created""")
         embedding_path = ''
-
     create_dataset(embed_fxn_mode=args.embed,
-                   latent_dimen=3,
                    tensor_dim=10,
                    latent_mode='sphere',
                    max_rot_speed=0.8,
                    max_scale_speed=0,
                    datsize=args.size,
-                   num_blocks=2,
+                   num_blocks=args.num_blocks,
                    embedding_path=embedding_path,
-                   save_datapath=datamode,
+                   save_datapath=args.datamode,
                    video_length=15,
-                   match_dimen=False,
                    shared_transition=args.shared,
-                   seed=0
+                   seed=0,
+                   recreate_model=args.recreate
                    )
 
 

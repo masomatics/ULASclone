@@ -1,8 +1,8 @@
 batchsize: 32
 seed: 1
-max_iteration: 1000000
+max_iteration: 300000
 report_freq: 1000
-model_snapshot_freq: 1000000
+model_snapshot_freq: 300000
 manager_snapshot_freq: 1000
 num_workers: 2
 T_cond: 5
@@ -20,7 +20,7 @@ train_data:
 
 model:
   fn: ./models/seqae.py
-  name: SeqAELSTSQ_so3Net and SeqAELSTSQ_LinearNet
+  name: SeqAELSTSQ_so3Net and SeqAELSTSQ_LinearNet and SeqAELSTSQ_iResNet
   args:
     dim_m: 10
     dim_a: 6

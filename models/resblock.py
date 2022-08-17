@@ -154,11 +154,11 @@ class Conv1d1x1Block(nn.Module):
 Invertible Resblock 
 '''
 class Invertible_Resblock_Fc(nn.Module):
-    def __init__(self, in_dim, nonlin='sigmoid', n_power_iter=3,
+    def __init__(self, in_dim, nonlin='elu', n_power_iter=3,
                  lip_const=0.97):
         super(Invertible_Resblock_Fc, self).__init__()
         self.in_dim = in_dim
-        self.num_layers = 2
+        self.num_layers = 3
         self.n_power_iter = n_power_iter
         self.lip_const = lip_const
         self.handmade = False

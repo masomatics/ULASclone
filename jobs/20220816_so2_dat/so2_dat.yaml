@@ -1,25 +1,27 @@
 batchsize: 32
 seed: 1
-max_iteration: 10000
+max_iteration: 300000
 report_freq: 1000
-model_snapshot_freq: 10000
+model_snapshot_freq: 300000
 manager_snapshot_freq: 1000
 num_workers: 2
 T_cond: 5
 lr: 0.001
 
+
 train_data:
   fn: ./datasets/so3_data.py
   name: SO3rotationSequence
   args:
-    data_filename: so3dat_sphere_iResNet.pt
+    data_filename: so2dat_sphere_Linear.pt and so2dat_sphere_iResNet.pt and so2dat_sphere_MLP.pt
+    #data_filename: so3dat_sphere_Linear.pt
     train: True
     T: 8
-    datamode: so3
+    datamode: so2
 
 model:
   fn: ./models/seqae.py
-  name: SeqAELSTSQ
+  name: SeqAELSTSQ_so3Net and SeqAELSTSQ_LinearNet and SeqAELSTSQ_iResNet
   args:
     dim_m: 10
     dim_a: 6
@@ -31,7 +33,7 @@ training_loop:
   fn: ./training_loops.py
   name: loop_seqmodel
   args:
-    lr_decay_iter: 40000
+    lr_decay_iter: 250000
     reconst_iter: 0
 
 

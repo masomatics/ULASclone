@@ -107,7 +107,6 @@ class LinearNet(nn.Module):
         self.network = nn.Linear(in_features=in_dim, out_features=out_dim)
 
     def __call__(self, x):
-        x = x.flatten(start_dim=1)
         return self.network(x)
 
 
@@ -136,5 +135,4 @@ class MLP(nn.Module):
         self.network = nn.Sequential(*self.layers)
 
     def __call__(self, x):
-        x = x.flatten(start_dim=1)
         return self.network(x)

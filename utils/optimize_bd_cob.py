@@ -36,8 +36,9 @@ def optimize_bd_cob(mats,
         total_loss, total_N = 0, 0
         for mat in dataloader:
             n_mat = change_of_basis(mat)
+            n_mat  = torch.abs(n_mat)
             n_mat = torch.matmul(n_mat.transpose(-2, -1), n_mat)
-
+            #n_mat = torch.abs(n_mat) + torch.abs(n_mat.transpose(-2, -1))
             loss = torch.mean(
                 tracenorm_of_normalized_laplacian(torch.abs(n_mat)))
             optimizer.zero_grad()

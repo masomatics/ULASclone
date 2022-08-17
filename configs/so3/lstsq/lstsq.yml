@@ -16,6 +16,7 @@ train_data:
     data_filename: so3dat_sphere_iResNet.pt
     train: True
     T: 10
+    datamode: so3
 
 
 model:
