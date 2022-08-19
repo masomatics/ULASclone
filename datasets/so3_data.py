@@ -8,7 +8,7 @@ import pdb
 import os
 from einops import rearrange
 import argparse
-
+import pickle
 
 #dataset root
 dat_root = '/mnt/nfs-mnj-hot-01/tmp/masomatics/block_diag/datasets/'
@@ -75,11 +75,13 @@ def create_dataset(embed_fxn_mode='Identity',
                    video_length=15,
                    shared_transition=False,
                    recreate_model=False,
-                   seed=0
+                   seed=0,
+                   changeb=False,
+                   PmatNet=''
                    ):
     torch.manual_seed(seed)
     np.random.seed(seed)
-
+    do_save_model = False
 
     datamode=save_datapath
     datpath = os.path.join(dat_root, datamode)
@@ -128,7 +130,12 @@ def create_dataset(embed_fxn_mode='Identity',
         embed_fxn.load_state_dict(embed_dict, strict=False)
         print(f"""{embedding_path} successfully loaded.""")
     elif recreate_model == True:
-        print("creating a new embedding model.")
+        answer = input("create a new embedding model? y/n \n")
+        if answer == 'y':
+            pass
+        else:
+            quit()
+        do_save_model = True
     else:
         print(f"""{embedding_path} does not exist.""")
         raise NotImplementedError
@@ -142,7 +149,18 @@ def create_dataset(embed_fxn_mode='Identity',
     trans_params = []
     trans_param_shared = random_trans_param(num_blocks, max_rot_speed, max_scale_speed, datamode)
 
+    #filename addendums
     addendum = '_shared_trans' if shared_transition == True else ''
+    if changeb == True: addendum = addendum + '_latentP'
+
+    pdb.set_trace()
+    #PmatNet for changing P along orbit
+    if len(PmatNet) == 0:
+        pass
+    else:
+        netpath = os.path.join(datpath, PmatNet)
+        PmatNet = pickle.load(netpath)
+
 
     for idx, latent_vec in enumerate(train_loader):
         if shared_transition == True:
@@ -150,32 +168,33 @@ def create_dataset(embed_fxn_mode='Identity',
         else:
             trans_param = random_trans_param(num_blocks, max_rot_speed,
                                              max_scale_speed, datamode=datamode)
-        latent_video, trans_mats = create_video_from_trans_param(latent_vec[0], video_length, trans_param,
-                                                                 datamode=datamode)
+        latent_video, trans_mats= create_video_from_trans_param(latent_vec[0], video_length, trans_param,
+                                                                 datamode=datamode, pmatnet=PmatNet)
 
         latent_video_input = rearrange(latent_video, 't d_s d_a -> t (d_s d_a)')
         so3_video = embed_fxn(latent_video_input).detach()
         # if match_dimen == True:
         #     so3_video = rearrange(so3_video, 'b w -> b 1 1 w')
+
         dataset.append(so3_video)
         latent_dataset.append(latent_video)
-
         trans_params.append(trans_mats)
+
         if idx % 1000 == 0:
             print(f"""{idx} videos processed.""")
 
     dataset = torch.stack(dataset)
     latent_dataset = torch.stack(latent_dataset)
 
-    dataset_with_label = {'data': dataset, 'trans':trans_params, 'latent':latent_dataset}
+    dataset_with_label = {'data': dataset, 'trans':trans_params, 'latent':latent_dataset, 'changePs':latent_changePs}
 
     data_save_path = os.path.join(datpath, f"""{datamode}dat_{latent_mode}_{embed_fxn_mode}{addendum}.pt""")
-    model_save_path = os.path.join(datpath, f"""{datamode}dat_{latent_mode}_{embed_fxn_mode}{addendum}_model.pt""")
+    model_save_path = os.path.join(datpath, f"""{datamode}dat_{latent_mode}_{embed_fxn_mode}_model.pt""")
 
 
     torch.save(dataset_with_label, data_save_path)
     #if type(embed_fxn) == nn.Module:
-    if len(embedding_path) == 0 or recreate_model==True:
+    if do_save_model == True:
         torch.save(embed_fxn.state_dict(), model_save_path)
         print(f"""MODEL saved at {model_save_path}""")
 
@@ -214,7 +233,7 @@ def random_trans_param(num_blocks, max_rot_speed, max_scale_speed,
     return trans_param
 
 
-def create_video_from_trans_param(latent_vec, T, trans_param, datamode='so3'):
+def create_video_from_trans_param(latent_vec, T, trans_param, datamode='so3', PmatNet=''):
     blocks = trans_param['blocks']
     num_blocks = len(blocks)
 
@@ -223,11 +242,13 @@ def create_video_from_trans_param(latent_vec, T, trans_param, datamode='so3'):
     dim = latent_vec.shape[1]
     for t in range(T):
         block_diag_mat = torch.zeros([dim, dim]).float()
-        if datamode == 'so3':
-            #scale_speed = trans_param['scale_speed']
-            #scale = float(scale_speed + 1)
+        #if Changeb == True, then change the basis inside each sequence.
+        if type(PmatNet) == str:
+            Pdep = torch.eye(block_diag_mat.shape[0])
+        else:
+            Pdep = PmatNet(latent_vec)
 
-            #v_t = torch.zeros(latent_vec.shape)
+        if datamode == 'so3':
             for k in range(num_blocks):
                 rodrigues_mat = torch.tensor(rodrigues_rotation(blocks[k]['axis'], t * blocks[k]['angle']))
                 block_diag_mat[(k*3):(k+1)*3, (k*3):(k+1)*3] = rodrigues_mat.float()
@@ -237,6 +258,7 @@ def create_video_from_trans_param(latent_vec, T, trans_param, datamode='so3'):
                 block_diag_mat[(k*2):(k+1)*2, (k*2):(k+1)*2] = rotation_matrix.float()
         else:
             raise NotImplementedError
+        block_diag_mat = torch.linalg.solve(Pdep, block_diag_mat @ Pdep)
         v_t = (latent_vec.float() @ block_diag_mat).float()
 
         latent_outputs.append(v_t)
@@ -260,6 +282,8 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--datamode', default='so3')
     parser.add_argument('-nb', '--num_blocks', type=int, default=2)
     parser.add_argument('-r', '--recreate', type=int, default=0)
+    parser.add_argument('-cb', '--changeb', type=int, default=0)
+
 
 
 
@@ -285,7 +309,8 @@ if __name__ == '__main__':
                    video_length=15,
                    shared_transition=args.shared,
                    seed=0,
-                   recreate_model=args.recreate
+                   recreate_model=args.recreate,
+                   changeb=args.changeb
                    )
 
 

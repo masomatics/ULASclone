@@ -4,6 +4,7 @@ from torch import nn
 from models.resblock import Block, Conv1d1x1Block, Invertible_Resblock_Fc
 from einops.layers.torch import Rearrange
 from einops import repeat
+from utils import misc
 from torch.nn import functional as F
 
 import pdb
@@ -113,26 +114,64 @@ class LinearNet(nn.Module):
 class MLP(nn.Module):
     def __init__(self, in_dim=2, out_dim=3,
                  num_layer=3,
-                 activation=nn.ELU, **kwargs):
+                 activation=nn.ELU,
+                 hidden_multiple = 3,
+                 initmode='cond',
+                 dospec=False,
+                 **kwargs):
         super(MLP, self).__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
         self.layers = []
         for k in range(num_layer):
-            linlayer = nn.Linear(in_features=self.in_dim,
-                                         out_features=self.in_dim)
-            nn.init.orthogonal_(linlayer.weight.data)
-            nn.init.uniform_(linlayer.bias.data)
+            if k == 0:
+                dimin = in_dim
+                dimout = in_dim * hidden_multiple
+            else:
+                dimin = in_dim * hidden_multiple
+                dimout = in_dim * hidden_multiple
+            linlayer = nn.Linear(in_features=dimin,
+                                         out_features=dimout)
+            if initmode == 'cond':
+                initialize_linear(linlayer, thresh=2.0)
+            elif initmode == 'default':
+                nn.init.orthogonal_(linlayer.weight.data)
+                nn.init.uniform_(linlayer.bias.data)
+            else:
+                raise NotImplementedError
+            if dospec == True:
+                snorm = misc.specnorm(nn.Parameter(linlayer.weight.data))
+                linlayer.weight.data  = nn.Parameter(0.97 * linlayer.weight.data/snorm)
 
             self.layers.append(linlayer)
             self.layers.append(activation())
-        linlayer = nn.Linear(in_features=self.in_dim,
+        linlayer = nn.Linear(in_features=dimout,
                                          out_features=self.out_dim)
-        nn.init.orthogonal_(linlayer.weight.data)
-        nn.init.uniform_(linlayer.bias.data)
+
+
         self.layers.append(linlayer)
 
         self.network = nn.Sequential(*self.layers)
 
     def __call__(self, x):
         return self.network(x)
+
+
+def initialize_linear(mylayer, thresh = 2.0):
+
+    nn.init.xavier_uniform_(mylayer.weight.data)
+    #nn.init.normal_(mylayer.weight.data)
+
+    weightmat  = mylayer.weight.data
+
+    while torch.linalg.cond(weightmat) > thresh*weightmat.shape[0]:
+        print('initializing loop')
+        nn.init.xavier_uniform_(mylayer.weight.data)
+        #nn.init.normal_(mylayer.weight.data)
+
+        weightmat = mylayer.weight.data
+
+    print('condition passed')
+    mylayer.weight.data = nn.Parameter(weightmat)
+
+

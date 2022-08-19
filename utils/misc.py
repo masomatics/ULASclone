@@ -52,3 +52,28 @@ def get_RTmat(theta, phi, gamma, w, h, dx, dy):
                    [0, f, h / 2, 0],
                    [0, 0, 1, 0]])
     return np.dot(A2, np.dot(T, np.dot(R, A1)))
+
+
+
+def specnorm(weightmat, repeat=5):
+    mydim0 = weightmat.shape[0]
+    mydim1 = weightmat.shape[1]
+
+    random_vec_r = torch.tensor(np.random.uniform(size=(mydim1, 1))).float()
+    random_vec_l = torch.tensor(np.random.uniform(size=(mydim0, 1))).float()
+
+    for k in range(repeat):
+        random_vec_l = weightmat @ random_vec_r
+        random_vec_l = random_vec_l / torch.sqrt(torch.sum(random_vec_l ** 2))
+
+        random_vec_r = weightmat.permute([1, 0]) @ random_vec_l
+        random_vec_r = random_vec_r / torch.sqrt(torch.sum(random_vec_r ** 2))
+
+    val = random_vec_l.permute([1, 0]) @ weightmat @ random_vec_r
+    return val
+
+
+def scale_specnorm(linlayer, const):
+    snorm = specnorm(nn.Parameter(linlayer.weight.data))
+    linlayer.weight.data = nn.Parameter(const * linlayer.weight.data / snorm)
+    return linlayer

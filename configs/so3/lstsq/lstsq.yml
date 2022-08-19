@@ -17,6 +17,7 @@ train_data:
     train: True
     T: 10
     datamode: so3
+    pmatnet:
 
 
 model:

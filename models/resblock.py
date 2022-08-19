@@ -8,7 +8,8 @@ from utils.weight_standarization import WeightStandarization, WeightStandarizati
 from models.spectral_norm_fc import spectral_norm_fc
 import torch.nn.utils.parametrize as P
 from utils.emb2d import Emb2D
-
+from utils import misc
+import pdb
 
 def upsample_conv(x, conv):
     # Upsample -> Conv
@@ -155,7 +156,7 @@ Invertible Resblock
 '''
 class Invertible_Resblock_Fc(nn.Module):
     def __init__(self, in_dim, nonlin='elu', n_power_iter=3,
-                 lip_const=0.97):
+                 lip_const=0.97, hidden_multiple=2):
         super(Invertible_Resblock_Fc, self).__init__()
         self.in_dim = in_dim
         self.num_layers = 3
@@ -174,10 +175,22 @@ class Invertible_Resblock_Fc(nn.Module):
         for k in range(self.num_layers):
             if k > 0:
                 layers.append(nonlin())
-            linlayer = nn.Linear(self.in_dim, self.in_dim)
-            nn.init.orthogonal_(linlayer.weight.data)
+                dim_in = self.in_dim * hidden_multiple
+                dim_out = self.in_dim * hidden_multiple
+                if k == self.num_layers - 1:
+                    dim_out = self.in_dim
+            else:
+                dim_in = self.in_dim
+                dim_out = self.in_dim * hidden_multiple
+            linlayer = nn.Linear(dim_in, dim_out)
+            linlayer = misc.scale_specnorm(linlayer, lip_const)
             nn.init.uniform_(linlayer.bias.data)
-            layers.append(self._wraper_spectral_norm(linlayer))
+
+            layers.append(linlayer)
+            # nn.init.orthogonal_(linlayer.weight.data)
+            #layers.append(self._wraper_spectral_norm(linlayer))
+
+
         self.bottleneck_block = nn.Sequential(*layers)
 
     def forward(self, x):
