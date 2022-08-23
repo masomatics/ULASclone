@@ -6,7 +6,7 @@ from einops.layers.torch import Rearrange
 from einops import repeat
 from utils import misc
 from torch.nn import functional as F
-
+import copy
 import pdb
 # https://github.com/lucidrains/denoising-diffusion-pytorch/blob/master/denoising_diffusion_pytorch/denoising_diffusion_pytorch.py
 
@@ -115,10 +115,11 @@ class MLP(nn.Module):
     def __init__(self, in_dim=2, out_dim=3,
                  num_layer=3,
                  activation=nn.ELU,
-                 hidden_multiple = 3,
+                 hidden_multiple = 6,
                  initmode='cond',
                  dospec=False,
                  **kwargs):
+
         super(MLP, self).__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
@@ -175,3 +176,41 @@ def initialize_linear(mylayer, thresh = 2.0):
     mylayer.weight.data = nn.Parameter(weightmat)
 
 
+
+
+class Radial_sine(nn.Module):
+    def __init__(self,  scale=3., freq=6. , ztrf=False, **kwargs):
+        super().__init__()
+        self.scale = scale
+        self.freq = freq
+        self.ztrf = ztrf
+
+    def __call__(self, dat):
+        dat = copy.deepcopy(dat)
+        original_shape = dat.shape
+        dat = dat.reshape([-1, 6])
+        #num_blocks = int(tensordim/3)
+
+        for pos in range(2):
+
+            x = dat[:, 3*pos + 0]
+            y = dat[:, 3*pos + 1]
+            z = dat[:, 3*pos + 2]
+            rad_dis = self.freq * torch.arctan(x / y)
+
+            if self.ztrf == True:
+                rad_disz =  self.freq * torch.arcsin(z)
+            else:
+                rad_disz =  np.pi/2
+
+
+            x = x * (np.sin(rad_dis) * np.sin(rad_disz) + self.scale)
+            y = y * (np.sin(rad_dis) * np.sin(rad_disz) + self.scale)
+            z = z * (np.sin(rad_dis) * np.sin(rad_disz) + self.scale)
+
+            dat[:, 3*pos + 0] = x
+            dat[:, 3*pos + 1] = y
+            dat[:, 3*pos + 2] = z
+
+        dat = dat.reshape(-1, original_shape[-1])
+        return dat

@@ -184,14 +184,15 @@ class SeqAELSTSQ_iResNet(SeqAELSTSQ_so3Net):
             dim_a,
             dim_m,
             **kwargs):
-        super().__init__(dim_a, dim_m,**kwargs)
+        super().__init__(dim_a, dim_m, **kwargs)
 
         self.enc = MLP_iResNet(in_dim=dim_a * dim_m)
         self.dec = MLP_iResNet(in_dim=dim_a * dim_m)
 
 
 
-#iResNet class for So3 use
+#Linear class for so3 use (This is implicitly calling MLP in SeqAELSTSQ_so3Net,
+#it must be changed)
 class SeqAELSTSQ_LinearNet(SeqAELSTSQ_so3Net):
 
     def __init__(
