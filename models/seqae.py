@@ -340,6 +340,7 @@ class SeqAENeuralM(SeqAELSTSQ):
             predictive=True,
             bottom_width=4,
             n_blocks=3,
+            dmode='default',
             *args,
             **kwargs):
         super(SeqAELSTSQ, self).__init__()
@@ -347,6 +348,7 @@ class SeqAENeuralM(SeqAELSTSQ):
         self.dim_m = dim_m
         self.predictive = predictive
         self.alignment = alignment
+        self.dmode = dmode
         self.initial_scale_M = 0.01
         self.enc = ResNetEncoder(
             dim_a*dim_m, k=k, kernel_size=kernel_size, n_blocks=n_blocks)
@@ -363,9 +365,29 @@ class SeqAENeuralM(SeqAELSTSQ):
         else:
             return dyn_fn
 
+    # dmode changes what is fed to get M
     def get_M(self, xs):
-        xs = rearrange(xs, 'n t c h w -> n (t c) h w')
-        M = self.M_net(xs)
+        if self.dmode == 'delta':
+            xsinput = xs[:, 1:] - xs[:, :-1]
+            xsinput = rearrange(xsinput, 'n t c h w -> n (t c) h w')
+        elif self.dmode == 'innerp':
+            #shape n t s a
+            H = self.encode(xs)
+            H0 = H[:, 1:]
+            H1 = H[:, :-1]
+            #this is still quite huge; very ad hoc at this point
+            xsinput = (H0 @ H1.permute([0, 1, 3, 2])).detach().reshape([-1, 16 ,256, 16])
+        elif self.dmode == 'innerpout':
+            H = self.encode(xs)
+            H0 = H[:, 1:]
+            H1 = H[:, :-1]
+            xsinput = (H0.permute([0, 1, 3, 2]) @ H1).detach()
+        elif self.dmode == 'default':
+            xsinput = rearrange(xs, 'n t c h w -> n (t c) h w')
+        else:
+            print(f"""{self.dmode} has no implementation""" )
+            raise NotImplementedError
+        M = self.M_net(xsinput)
         M = rearrange(M, 'n (a_1 a_2) -> n a_1 a_2', a_1=self.dim_a)
         M = self.initial_scale_M * M
         return M
@@ -400,6 +422,7 @@ class SeqAENeuralM(SeqAELSTSQ):
             H_preds.append(H_last)
         H_preds = torch.cat(H_preds, axis=1)
         x_preds = self.decode(H_preds)
+
         if return_reg_loss:
             losses = (dynamics_models.loss_bd(fn.M, self.alignment),
                       dynamics_models.loss_orth(fn.M), self.M_commutability(fn.M))
@@ -414,6 +437,25 @@ class SeqAENeuralM(SeqAELSTSQ):
             comm = (M[id1] @ M[id2]) - (M[id2] @ M[id1])
             loss = loss + torch.sum(comm**2)
         return loss
+
+    def M_algebraic_inv(self, xs, sample_size=5):
+        loss = 0
+        M0 = self.get_M(xs)
+        #n t s a
+        for _ in range(sample_size):
+            Hs_t = self.encode(xs).permute([0,1,3,2])
+            ds = Hs_t.shape[-1]
+            Pmat = torch.tensor(np.random.normal(size=[ds, ds]).float())
+            Hs_tP = Hs_t @ Pmat
+            Hs_P = Hs_tP.permute([0,1,3,2])
+            xs1 = self.decode(Hs_P)
+            M1 =self.get_M(xs1)
+            loss = loss + torch.sum((M1 - M0)**2)
+        return loss
+
+
+
+
 
 
 class SeqAENeuralM_comm(SeqAENeuralM):
