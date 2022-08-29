@@ -149,7 +149,47 @@ class Conv1d1x1Block(nn.Module):
     def __call__(self, x):
         return self.residual(x) + self.shortcut(x)
 
+'''
+MLP Resblock
+'''
+class MLP_Resblock(nn.Module):
+    def __init__(self, in_dim, nonlin='elu', num_layers=3,
+                 hidden_multiple=2):
+        super(MLP_Resblock, self).__init__()
+        self.in_dim = in_dim
+        self.num_layers = num_layers
+        self.handmade = False
 
+        nonlin = {
+            "relu": nn.ReLU,
+            "elu": nn.ELU,
+            "softplus": nn.Softplus,
+            "sigmoid":nn.Sigmoid
+        }[nonlin]
+
+        layers = []
+        for k in range(self.num_layers):
+            if k > 0:
+                layers.append(nonlin())
+                dim_in = int(self.in_dim * hidden_multiple)
+                dim_out = int(self.in_dim * hidden_multiple)
+                if k == self.num_layers - 1:
+                    dim_out = self.in_dim
+            else:
+                dim_in = self.in_dim
+                dim_out = int(self.in_dim * hidden_multiple)
+            linlayer = nn.Linear(dim_in, dim_out)
+            nn.init.uniform_(linlayer.bias.data)
+            layers.append(linlayer)
+
+
+        self.bottleneck_block = nn.Sequential(*layers)
+
+    def forward(self, x):
+
+        Fx = self.bottleneck_block(x)
+        y = x + Fx
+        return y
 
 '''
 Invertible Resblock 
@@ -196,6 +236,7 @@ class Invertible_Resblock_Fc(nn.Module):
     def forward(self, x):
 
         Fx = self.bottleneck_block(x)
+
         y = x + Fx
         return y
 

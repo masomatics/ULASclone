@@ -3,6 +3,17 @@ import torch
 from torch import nn
 from einops import repeat
 import numpy as np
+import  pdb
+
+from scipy.linalg import orth
+
+def get_orthmat(d, s):
+    orthmat = torch.empty(3,2)
+    while orthmat.shape[0] != orthmat.shape[1]:
+        Phi = np.random.randn(d, s).astype(np.float32)
+        orthmat = torch.tensor(orth(Phi)[:d])
+    return orthmat
+
 
 
 def freq_to_wave(freq, is_radian=True):

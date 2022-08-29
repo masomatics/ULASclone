@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch import nn
 from models.resblock import Block, Conv1d1x1Block, Invertible_Resblock_Fc
+from models import resblock as rb
 from einops.layers.torch import Rearrange
 from einops import repeat
 from utils import misc
@@ -53,6 +54,33 @@ class ResNetEncoder(nn.Module):
         h = self.linear(h)
         return h
 
+
+class ResNetMLP(nn.Module):
+    def __init__(self,
+                 in_dim=1024,
+                 out_dim=256,
+                 nonlin='elu',
+                 n_blocks=3,
+                 hidden_multiple=2):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.phi0 = rb.MLP_Resblock(in_dim=in_dim, nonlin=nonlin, hidden_multiple=hidden_multiple, num_layers=2)
+        self.mid_dim = int(in_dim * hidden_multiple)
+        self.lin01 = nn.LazyLinear(self.mid_dim)
+        self.phi1 = nn.Sequential(
+            *[rb.MLP_Resblock(in_dim=self.mid_dim, nonlin=nonlin, hidden_multiple=0.8, num_layers=2) for k in range(n_blocks-1)])
+        self.linear = nn.LazyLinear(out_dim)
+
+
+    def __call__(self, x):
+        h = torch.flatten(x, start_dim=1)
+        h = self.phi0(h)
+        h = self.lin01(h)
+        h = self.phi1(h)
+        h = h.reshape(h.shape[0], -1)
+        h = self.linear(h)
+        return h
 
 class ResNetDecoder(nn.Module):
     def __init__(self, ch_x, k=1, act=nn.ReLU(), kernel_size=3, bottom_width=4, n_blocks=3):
@@ -115,8 +143,8 @@ class MLP(nn.Module):
     def __init__(self, in_dim=2, out_dim=3,
                  num_layer=3,
                  activation=nn.ELU,
-                 hidden_multiple = 6,
-                 initmode='cond',
+                 hidden_multiple = 2,
+                 initmode='default',
                  dospec=False,
                  **kwargs):
 
@@ -127,10 +155,10 @@ class MLP(nn.Module):
         for k in range(num_layer):
             if k == 0:
                 dimin = in_dim
-                dimout = in_dim * hidden_multiple
+                dimout = int(in_dim * hidden_multiple)
             else:
-                dimin = in_dim * hidden_multiple
-                dimout = in_dim * hidden_multiple
+                dimin = int(in_dim * hidden_multiple)
+                dimout = int(in_dim * hidden_multiple)
             linlayer = nn.Linear(in_features=dimin,
                                          out_features=dimout)
             if initmode == 'cond':
@@ -155,6 +183,7 @@ class MLP(nn.Module):
         self.network = nn.Sequential(*self.layers)
 
     def __call__(self, x):
+        x = x.flatten(start_dim=1)
         return self.network(x)
 
 

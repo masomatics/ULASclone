@@ -8,6 +8,7 @@ num_workers: 2
 T_cond: 2
 T_pred: 1
 lr: 0.0003
+comm_reg: 0
 
 train_data:
   fn: ./datasets/seq_mnist.py
@@ -31,6 +32,7 @@ model:
     dim_a: 16
     ch_x: 3
     k: 4.
+    dmode: default
 
 
 

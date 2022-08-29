@@ -5,12 +5,13 @@ from models import dynamics_models
 import torch.nn.utils.parametrize as P
 from models.dynamics_models import LinearTensorDynamicsLSTSQ, MultiLinearTensorDynamicsLSTSQ, HigherOrderLinearTensorDynamicsLSTSQ
 from models.base_networks import ResNetEncoder, ResNetDecoder, Conv1d1x1Encoder, MLP_iResNet, LinearNet, MLP
+from models import base_networks as bn
 from einops import rearrange, repeat
 from utils.clr import simclr
 import pdb
 from sklearn.metrics import r2_score
 import copy
-
+from utils import misc
 
 class SeqAELSTSQ(nn.Module):
     def __init__(
@@ -340,7 +341,9 @@ class SeqAENeuralM(SeqAELSTSQ):
             predictive=True,
             bottom_width=4,
             n_blocks=3,
+            t_c = 2,
             dmode='default',
+            mnet_mlp=False,
             *args,
             **kwargs):
         super(SeqAELSTSQ, self).__init__()
@@ -352,8 +355,18 @@ class SeqAENeuralM(SeqAELSTSQ):
         self.initial_scale_M = 0.01
         self.enc = ResNetEncoder(
             dim_a*dim_m, k=k, kernel_size=kernel_size, n_blocks=n_blocks)
-        self.M_net = ResNetEncoder(
-            dim_a*dim_a, k=k, kernel_size=kernel_size, n_blocks=n_blocks)
+
+        if dmode in ['orth', 'mix'] and mnet_mlp in [1, 2]:
+            if mnet_mlp == 1:
+                self.M_net = bn.ResNetMLP(in_dim=t_c * dim_m*dim_a, out_dim=dim_a*dim_a,  n_blocks=n_blocks,
+                                          hidden_multiple=0.2)
+            if mnet_mlp == 2:
+                self.M_net = bn.MLP(in_dim=t_c * dim_m*dim_a, out_dim=dim_a*dim_a,  n_blocks=n_blocks, initmode = 'default',
+                                    hidden_multiple=0.2)
+        else:
+            self.M_net = ResNetEncoder(
+                dim_a*dim_a, k=k, kernel_size=kernel_size, n_blocks=n_blocks)
+
         self.dec = ResNetDecoder(
             ch_x, k=k, kernel_size=kernel_size, n_blocks=n_blocks, bottom_width=bottom_width)
 
@@ -367,6 +380,8 @@ class SeqAENeuralM(SeqAELSTSQ):
 
     # dmode changes what is fed to get M
     def get_M(self, xs):
+        dev = xs.device
+
         if self.dmode == 'delta':
             xsinput = xs[:, 1:] - xs[:, :-1]
             xsinput = rearrange(xsinput, 'n t c h w -> n (t c) h w')
@@ -382,6 +397,23 @@ class SeqAENeuralM(SeqAELSTSQ):
             H0 = H[:, 1:]
             H1 = H[:, :-1]
             xsinput = (H0.permute([0, 1, 3, 2]) @ H1).detach()
+        #Perturbation with orthogonal/mixing transformation
+        elif self.dmode in ['orth', 'mix'] :
+            # n t s a
+            device = xs.device
+            H = self.encode(xs)
+            n, t, s, a = H.shape
+            if self.dmode == 'orth':
+                P = torch.tensor(
+                    np.random.normal(size=[n, 1, s, s])).float().to(device)
+                U, _, V = torch.linalg.svd(P)
+                P = U @ V
+            else:
+                P= torch.tensor(np.random.normal(size=[n, 1, s, s])).float().to(dev)
+            Pmat = P.tile(dims = (1, t, 1, 1)).float()
+            #(n t s s) @ (n t s a). s part is being transformed
+            xsinput = Pmat @ H
+
         elif self.dmode == 'default':
             xsinput = rearrange(xs, 'n t c h w -> n (t c) h w')
         else:
@@ -438,20 +470,30 @@ class SeqAENeuralM(SeqAELSTSQ):
             loss = loss + torch.sum(comm**2)
         return loss
 
-    def M_algebraic_inv(self, xs, sample_size=5):
-        loss = 0
-        M0 = self.get_M(xs)
-        #n t s a
+    #sample_size: number of random sampling of P
+
+    #To be used for regularization
+    def M_algebraic_inv(self, xs, sample_size=5, orthog=False):
+
+        # n t s a
+        Hs = self.encode(xs)
+        M0 = self.get_M(Hs)
+
         for _ in range(sample_size):
-            Hs_t = self.encode(xs).permute([0,1,3,2])
-            ds = Hs_t.shape[-1]
-            Pmat = torch.tensor(np.random.normal(size=[ds, ds]).float())
+            # n t a s
+            Hs_t = Hs.permute([0, 1, 3, 2])
+            ds = Hs_t.shape(-1)
+            if orthog == False:
+                Pmat = torch.tensor(np.random.normal(size=[ds, ds]).float())
+            else:
+                Pmat = misc.get_orthmat(ds, ds)
             Hs_tP = Hs_t @ Pmat
             Hs_P = Hs_tP.permute([0,1,3,2])
-            xs1 = self.decode(Hs_P)
-            M1 =self.get_M(xs1)
+            M1 =self.get_M(Hs_P)
             loss = loss + torch.sum((M1 - M0)**2)
         return loss
+
+
 
 
 
