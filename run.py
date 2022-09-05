@@ -49,7 +49,7 @@ def train(config):
 
     manager.extend(
         extensions.PrintReport(
-            ['epoch', 'iteration', 'train/loss', 'train/loss_bd', 'train/loss_orth', 'train/loss_comm', 'loss_internal_0', 'loss_internal_T',  'elapsed_time']),
+            ['epoch', 'iteration', 'train/loss', 'train/loss_bd', 'train/loss_orth', 'train/loss_comm', 'train/loss_inv',  'elapsed_time']),
         trigger=(config['report_freq'], 'iteration'))
     manager.extend(extensions.LogReport(
         trigger=(config['report_freq'], 'iteration')))
@@ -57,10 +57,11 @@ def train(config):
         extensions.snapshot(
             target=model, filename='snapshot_model_iter_{.iteration}'),
         trigger=(config['model_snapshot_freq'], 'iteration'))
-    manager.extend(
-        extensions.snapshot(
-            target=manager, filename='snapshot_manager_iter_{.iteration}', n_retains=1),
-        trigger=(config['manager_snapshot_freq'], 'iteration'))
+    # manager.extend(
+    #     extensions.snapshot(
+    #         target=manager, filename='snapshot_manager_iter_{.iteration}', n_retains=1),
+    #     trigger=(config['manager_snapshot_freq'], 'iteration'))
+
     # Run training loop
     print("Start training...")
     yu.load_component_fxn(config['training_loop'])(

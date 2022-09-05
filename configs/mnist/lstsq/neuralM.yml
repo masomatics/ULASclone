@@ -9,6 +9,7 @@ T_cond: 2
 T_pred: 1
 lr: 0.0003
 comm_reg: 0
+inv_reg: 0
 
 train_data:
   fn: ./datasets/seq_mnist.py

@@ -21,21 +21,27 @@ def loop_seqmodel(manager, model, optimizer, train_loader, config, device):
                     images = torch.stack(images)
                     images = images.transpose(1, 0)
                 images = images.to(device)
+                #loss,  (loss_bd, loss_orth, loss_comm) = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst)
+                loss,  loss_dict = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst)
 
-                loss,  (loss_bd, loss_orth, loss_comm) = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst)
                 optimizer.zero_grad()
+                comm_const = 0
+                comm_inv = 0
+
                 if 'comm_reg' in config.keys():
                     comm_const = config['comm_reg']
-                else:
-                    comm_const = 0
-                loss = loss + comm_const * loss_comm
+                if 'inv_reg' in config.keys():
+                    inv_const = config['inv_reg']
+
+                loss = loss + comm_const * loss_dict['loss_comm'] + inv_const * loss_dict['loss_inv']
                 loss.backward()
                 optimizer.step()
                 ppe.reporting.report({
                     'train/loss': loss.item(),
-                    'train/loss_bd': loss_bd.item(),
-                    'train/loss_orth': loss_orth.item(),
-                    'train/loss_comm': loss_comm.item(),
+                    'train/loss_bd': loss_dict['loss_bd'].item(),
+                    'train/loss_orth': loss_dict['loss_orth'].item(),
+                    'train/loss_comm': loss_dict['loss_comm'].item(),
+                    'train/loss_inv': loss_dict['loss_inv'].item(),
                 })
 
             if manager.stop_trigger:

@@ -371,29 +371,28 @@ class SeqAENeuralM(SeqAELSTSQ):
             ch_x, k=k, kernel_size=kernel_size, n_blocks=n_blocks, bottom_width=bottom_width)
 
     def dynamics_fn(self, xs, verbose=False):
-        M = self.get_M(xs)
+        M, H = self.get_M(xs)
         dyn_fn = dynamics_models.LinearTensorDynamicsLSTSQ.DynFn(M)
         if verbose:
-            return dyn_fn, M
+            return dyn_fn, M, H
         else:
             return dyn_fn
 
     # dmode changes what is fed to get M
     def get_M(self, xs):
         dev = xs.device
+        H = self.encode(xs)
 
         if self.dmode == 'delta':
             xsinput = xs[:, 1:] - xs[:, :-1]
             xsinput = rearrange(xsinput, 'n t c h w -> n (t c) h w')
         elif self.dmode == 'innerp':
             #shape n t s a
-            H = self.encode(xs)
             H0 = H[:, 1:]
             H1 = H[:, :-1]
             #this is still quite huge; very ad hoc at this point
             xsinput = (H0 @ H1.permute([0, 1, 3, 2])).detach().reshape([-1, 16 ,256, 16])
         elif self.dmode == 'innerpout':
-            H = self.encode(xs)
             H0 = H[:, 1:]
             H1 = H[:, :-1]
             xsinput = (H0.permute([0, 1, 3, 2]) @ H1).detach()
@@ -401,7 +400,6 @@ class SeqAENeuralM(SeqAELSTSQ):
         elif self.dmode in ['orth', 'mix'] :
             # n t s a
             device = xs.device
-            H = self.encode(xs)
             n, t, s, a = H.shape
             if self.dmode == 'orth':
                 P = torch.tensor(
@@ -412,8 +410,10 @@ class SeqAENeuralM(SeqAELSTSQ):
                 P= torch.tensor(np.random.normal(size=[n, 1, s, s])).float().to(dev)
             Pmat = P.tile(dims = (1, t, 1, 1)).float()
             #(n t s s) @ (n t s a). s part is being transformed
-            xsinput = Pmat @ H
-
+            xsinput = Pmat @ H.detach()
+        elif self.dmode == 'plainh':
+            xsinput = H.detach()
+        #baseline Neural M Star
         elif self.dmode == 'default':
             xsinput = rearrange(xs, 'n t c h w -> n (t c) h w')
         else:
@@ -422,7 +422,7 @@ class SeqAENeuralM(SeqAELSTSQ):
         M = self.M_net(xsinput)
         M = rearrange(M, 'n (a_1 a_2) -> n a_1 a_2', a_1=self.dim_a)
         M = self.initial_scale_M * M
-        return M
+        return M, H
 
     def __call__(self, xs,
                  n_rolls=1,
@@ -430,10 +430,11 @@ class SeqAENeuralM(SeqAELSTSQ):
                  return_Ms=False,
                  reconst=False):
         # ==Esitmate dynamics==
-        fn, M = self.dynamics_fn(xs, verbose=True)
-
+        fn, M, H = self.dynamics_fn(xs, verbose=True)
+        dev = xs.device
+        #pdb.set_trace()
         if reconst:
-            H = self.encode(xs)
+            #H = self.encode(xs)
             if self.predictive:
                 H_last = H[:, -1:]
             else:
@@ -456,8 +457,17 @@ class SeqAENeuralM(SeqAELSTSQ):
         x_preds = self.decode(H_preds)
 
         if return_reg_loss:
-            losses = (dynamics_models.loss_bd(fn.M, self.alignment),
-                      dynamics_models.loss_orth(fn.M), self.M_commutability(fn.M))
+            losses = {}
+            losses['loss_bd'] = dynamics_models.loss_bd(fn.M, self.alignment)
+            losses['loss_orth'] = dynamics_models.loss_orth(fn.M)
+            losses['loss_comm'] = self.M_commutability(fn.M)
+            losses['loss_inv'] = self.M_algebraic_inv(M, H)
+            # if self.dmode in ['orth', 'mix']:
+            #     losses['loss_inv'] = self.M_algebraic_inv(M, H)
+            # else:
+            #     losses['loss_inv'] = torch.tensor([0]).float().to(dev)
+            # losses = (dynamics_models.loss_bd(fn.M, self.alignment),
+            #           dynamics_models.loss_orth(fn.M), self.M_commutability(fn.M))
             return x_preds, losses
         else:
             return x_preds
@@ -473,28 +483,29 @@ class SeqAENeuralM(SeqAELSTSQ):
     #sample_size: number of random sampling of P
 
     #To be used for regularization
-    def M_algebraic_inv(self, xs, sample_size=5, orthog=False):
+    def M_algebraic_inv(self, M, H,  sample_size=2):
 
         # n t s a
-        Hs = self.encode(xs)
-        M0 = self.get_M(Hs)
-
+        Hs = H.detach()
+        M0 = M
+        dev = M.device
+        loss = 0
         for _ in range(sample_size):
             # n t a s
             Hs_t = Hs.permute([0, 1, 3, 2])
-            ds = Hs_t.shape(-1)
-            if orthog == False:
-                Pmat = torch.tensor(np.random.normal(size=[ds, ds]).float())
+            ds = Hs_t.shape[-1]
+            if self.dmode == 'mix':
+                Pmat = torch.tensor(np.random.normal(size=[ds, ds])).float().to(dev)
+            elif self.dmode == 'orth':
+                Pmat = misc.get_orthmat(ds, ds).to(dev)
             else:
-                Pmat = misc.get_orthmat(ds, ds)
+                return torch.tensor([0]).float().to(dev)
             Hs_tP = Hs_t @ Pmat
-            Hs_P = Hs_tP.permute([0,1,3,2])
-            M1 =self.get_M(Hs_P)
+            Hs_P = Hs_tP.permute([0,1,3,2]).detach()
+            M1 =self.M_net(Hs_P)
+            M1 = rearrange(M1, 'n (a_1 a_2) -> n a_1 a_2', a_1=self.dim_a)
             loss = loss + torch.sum((M1 - M0)**2)
         return loss
-
-
-
 
 
 
