@@ -21,19 +21,18 @@ def loop_seqmodel(manager, model, optimizer, train_loader, config, device):
                     images = torch.stack(images)
                     images = images.transpose(1, 0)
                 images = images.to(device)
+                regconfig = config['reg']
                 #loss,  (loss_bd, loss_orth, loss_comm) = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst)
-                loss,  loss_dict = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst)
+                loss,  loss_dict = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst, regconfig=regconfig)
 
                 optimizer.zero_grad()
-                comm_const = 0
-                comm_inv = 0
 
-                if 'comm_reg' in config.keys():
-                    comm_const = config['comm_reg']
-                if 'inv_reg' in config.keys():
-                    inv_const = config['inv_reg']
+                comm_const = regconfig['reg_comm'] if regconfig['reg_comm'] != 'None' else 0
+                inv_const = regconfig['reg_inv'] if regconfig['reg_inv'] != 'None' else 0
+                reclat_const = regconfig['reg_latent'] if regconfig['reg_latent'] != 'None' else 0
 
-                loss = loss + comm_const * loss_dict['loss_comm'] + inv_const * loss_dict['loss_inv']
+
+                loss = loss + comm_const * loss_dict['loss_comm'] + inv_const * loss_dict['loss_inv'] + reclat_const * loss_dict['loss_latent']
                 loss.backward()
                 optimizer.step()
                 ppe.reporting.report({
@@ -42,6 +41,7 @@ def loop_seqmodel(manager, model, optimizer, train_loader, config, device):
                     'train/loss_orth': loss_dict['loss_orth'].item(),
                     'train/loss_comm': loss_dict['loss_comm'].item(),
                     'train/loss_inv': loss_dict['loss_inv'].item(),
+                    'train/loss_latent': loss_dict['loss_latent'].item(),
                 })
 
             if manager.stop_trigger:

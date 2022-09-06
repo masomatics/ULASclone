@@ -8,8 +8,12 @@ num_workers: 2
 T_cond: 2
 T_pred: 1
 lr: 0.0003
-comm_reg: 0
-inv_reg: 0
+reg:
+  reg_comm:
+  reg_bd:
+  reg_inv:
+  reg_orth:
+  reg_latent:
 
 train_data:
   fn: ./datasets/seq_mnist.py
@@ -36,6 +40,7 @@ model:
     k: 2.
     dmode: default
     mnet_mlp: 0
+    predictive:
 
 
 

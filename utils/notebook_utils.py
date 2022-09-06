@@ -76,6 +76,5 @@ def read_history(targpath):
             for k in range(len(log)):
                 values.append(log[k][key])
             dict_history[key] = values
-        print(querykeys)
     return dict_history
 
