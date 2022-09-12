@@ -8,6 +8,8 @@ num_workers: 2
 T_cond: 2
 T_pred: 1
 lr: 0.0003
+reg:
+  reg_bd:
 
 train_data:
   fn: ./datasets/seq_mnist.py
@@ -32,6 +34,7 @@ model:
     ch_x: 3
     k: 2.
     predictive: True
+    detachM: 0
 
 training_loop:
   fn: ./training_loops.py

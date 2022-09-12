@@ -6,6 +6,7 @@ from utils.clr import simclr
 from utils.misc import freq_to_wave
 from tqdm import tqdm
 import pdb
+from utils import misc
 
 def loop_seqmodel(manager, model, optimizer, train_loader, config, device):
     while not manager.stop_trigger:
@@ -24,25 +25,31 @@ def loop_seqmodel(manager, model, optimizer, train_loader, config, device):
                 regconfig = config['reg']
                 #loss,  (loss_bd, loss_orth, loss_comm) = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst)
                 loss,  loss_dict = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst, regconfig=regconfig)
-
                 optimizer.zero_grad()
+                # comm_const = regconfig['reg_comm'] if regconfig['reg_comm'] != 'None' else 0
+                # inv_const = regconfig['reg_inv'] if regconfig['reg_inv'] != 'None' else 0
+                # reclat_const = regconfig['reg_latent'] if regconfig['reg_latent'] != 'None' else 0
+                for key in list(regconfig.keys()):
+                    keyconst = regconfig[key] if (regconfig[key] != 'None' and regconfig[key] != None) else 0
+                    if key in list(loss_dict.keys()):
+                        loss = loss + keyconst * loss_dict[key]
 
-                comm_const = regconfig['reg_comm'] if regconfig['reg_comm'] != 'None' else 0
-                inv_const = regconfig['reg_inv'] if regconfig['reg_inv'] != 'None' else 0
-                reclat_const = regconfig['reg_latent'] if regconfig['reg_latent'] != 'None' else 0
 
-
-                loss = loss + comm_const * loss_dict['loss_comm'] + inv_const * loss_dict['loss_inv'] + reclat_const * loss_dict['loss_latent']
+                #loss = loss + comm_const * loss_dict['loss_comm'] + inv_const * loss_dict['loss_inv'] + reclat_const * loss_dict['loss_latent']
                 loss.backward()
                 optimizer.step()
-                ppe.reporting.report({
-                    'train/loss': loss.item(),
-                    'train/loss_bd': loss_dict['loss_bd'].item(),
-                    'train/loss_orth': loss_dict['loss_orth'].item(),
-                    'train/loss_comm': loss_dict['loss_comm'].item(),
-                    'train/loss_inv': loss_dict['loss_inv'].item(),
-                    'train/loss_latent': loss_dict['loss_latent'].item(),
-                })
+                report_dict = misc.create_reportdict(loss , loss_dict)
+                ppe.reporting.report(report_dict)
+
+                # ppe.reporting.report({
+                #     'train/loss': loss.item(),
+                #     'train/loss_bd': loss_dict['reg_bd'].item(),
+                #     'train/loss_orth': loss_dict['reg_orth'].item(),
+                #     'train/loss_comm': loss_dict['reg_comm'].item(),
+                #     'train/loss_inv': loss_dict['reg_inv'].item(),
+                #     'train/loss_latent': loss_dict['reg_latent'].item(),
+                #     'train/loss_obs': loss_dict['reg_obs'].item(),
+                # })
 
             if manager.stop_trigger:
                 break

@@ -59,7 +59,7 @@ class LinearTensorDynamicsLSTSQ(nn.Module):
         super().__init__()
         self.alignment = alignment
 
-    def __call__(self, H, return_loss=False, fix_indices=None):
+    def __call__(self, H, return_loss=False, fix_indices=None, do_detach=False):
         # Regress M.
         # Note: backpropagation is disabled when fix_indices is not None.
 
@@ -83,6 +83,11 @@ class LinearTensorDynamicsLSTSQ(nn.Module):
             M_star[:, active_indices[:, np.newaxis], active_indices] = _M_star
         else:
             M_star = _solve(_H0, _H1)
+
+        if do_detach == True:
+            M_star = M_star.detach()
+        pdb.set_trace()
+
         dyn_fn = self.DynFn(M_star)
         loss_internal_T = _loss(dyn_fn(H0), H1)
         ppe.reporting.report({

@@ -49,7 +49,7 @@ def train(config):
 
     manager.extend(
         extensions.PrintReport(
-            ['epoch', 'iteration', 'train/loss', 'train/loss_bd', 'train/loss_orth', 'train/loss_comm', 'train/loss_inv', 'train/loss_latent',  'elapsed_time']),
+            ['epoch', 'iteration', 'train/loss', 'train/loss_bd', 'train/loss_orth', 'train/loss_comm', 'train/loss_inv', 'train/loss_latent', 'train/loss_obs', 'elapsed_time']),
         trigger=(config['report_freq'], 'iteration'))
     manager.extend(extensions.LogReport(
         trigger=(config['report_freq'], 'iteration')))

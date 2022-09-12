@@ -26,6 +26,7 @@ class SeqAELSTSQ(nn.Module):
             predictive=True,
             bottom_width=4,
             n_blocks=3,
+            detachM=0,
             *args,
             **kwargs):
         super().__init__()
@@ -37,6 +38,7 @@ class SeqAELSTSQ(nn.Module):
         self.dec = ResNetDecoder(
             ch_x, k=k, kernel_size=kernel_size, bottom_width=bottom_width, n_blocks=n_blocks)
         self.dynamics_model = LinearTensorDynamicsLSTSQ(alignment=alignment)
+        self.detachM = detachM
         if change_of_basis:
             self.change_of_basis = nn.Parameter(
                 torch.empty(dim_a, dim_a))
@@ -68,7 +70,10 @@ class SeqAELSTSQ(nn.Module):
 
     def get_M(self, xs):
         dyn_fn = self.dynamics_fn(xs)
-        return dyn_fn.M
+        Mstar = dyn_fn.M
+        if self.detachM == 1:
+            Mstar = Mstar.detach()
+        return Mstar
 
     def decode(self, H):
         if hasattr(self, "change_of_basis"):
@@ -95,6 +100,11 @@ class SeqAELSTSQ(nn.Module):
                        n_rolls=xs.shape[1] - T_cond, reconst=reconst, regconfig=regconfig)
         if return_reg_loss:
             xs_pred, reg_losses = xs_pred
+            reg_losses = {'reg_bd': reg_losses[0],
+                      'reg_orth': reg_losses[1],
+                      'loss_internal': reg_losses[2]}
+            #losses = (loss_bd(dyn_fn.M, self.alignment),
+            #          loss_orth(dyn_fn.M), loss_internal_T)
         if reconst:
             xs_target = xs
         else:
@@ -110,7 +120,7 @@ class SeqAELSTSQ(nn.Module):
 
         # ==Esitmate dynamics==  M IS APPLIED HERE
         ret = self.dynamics_model(
-            H, return_loss=return_reg_loss, fix_indices=fix_indices)
+            H, return_loss=return_reg_loss, fix_indices=fix_indices, do_detach=self.detachM)
         if return_reg_loss:
             # fn is a map by M_star. Loss is the training external loss
             fn, losses = ret
@@ -166,6 +176,11 @@ class SeqAELSTSQ_so3Net(SeqAELSTSQ):
                        n_rolls=xs.shape[1] - T_cond, reconst=reconst)
         if return_reg_loss:
             xs_pred, reg_losses = xs_pred
+            losses = {'reg_bd': reg_losses[0],
+                      'reg_orth': reg_losses[1],
+                      'loss_internal': reg_losses[2]}
+            #losses = (loss_bd(dyn_fn.M, self.alignment),
+            #          loss_orth(dyn_fn.M), loss_internal_T)
         if reconst:
             xs_target = xs
         else:
@@ -250,6 +265,9 @@ class SeqAEHOLSTSQ(SeqAELSTSQ):
         if return_reg_loss:
             # fn is a map by M_star. Loss is the training external loss
             fn, Ms, losses = ret
+            losses = {'reg_bd': losses[0],
+                      'reg_orth': losses[1],
+                      'loss_internal': losses[2]}
         else:
             fn, Ms = ret
 
@@ -384,44 +402,48 @@ class SeqAENeuralM(SeqAELSTSQ):
     def get_M(self, xs):
         dev = xs.device
         H = self.encode(xs)
-
-        if self.dmode == 'delta':
-            xsinput = xs[:, 1:] - xs[:, :-1]
-            xsinput = rearrange(xsinput, 'n t c h w -> n (t c) h w')
-        elif self.dmode == 'innerp':
-            #shape n t s a
-            H0 = H[:, 1:]
-            H1 = H[:, :-1]
-            #this is still quite huge; very ad hoc at this point
-            xsinput = (H0 @ H1.permute([0, 1, 3, 2])).detach().reshape([-1, 16 ,256, 16])
-        elif self.dmode == 'innerpout':
-            H0 = H[:, 1:]
-            H1 = H[:, :-1]
-            xsinput = (H0.permute([0, 1, 3, 2]) @ H1).detach()
-        #Perturbation with orthogonal/mixing transformation
-        elif self.dmode in ['orth', 'mix'] :
-            # n t s a
-            device = xs.device
-            n, t, s, a = H.shape
-            if self.dmode == 'orth':
-                P = torch.tensor(
-                    np.random.normal(size=[n, 1, s, s])).float().to(device)
-                U, _, V = torch.linalg.svd(P)
-                P = U @ V
-            else:
-                P= torch.tensor(np.random.normal(size=[n, 1, s, s])).float().to(dev)
-            Pmat = P.tile(dims = (1, t, 1, 1)).float()
-            #(n t s s) @ (n t s a). s part is being transformed
-            xsinput = Pmat @ H.detach()
-        elif self.dmode == 'plainh':
-            xsinput = H.detach()
-        #baseline Neural M Star
-        elif self.dmode == 'default':
-            xsinput = rearrange(xs, 'n t c h w -> n (t c) h w')
-        else:
-            print(f"""{self.dmode} has no implementation""" )
+        if self.dmode == 'lstq':
             raise NotImplementedError
-        M = self.M_net(xsinput)
+        else:
+            if self.dmode == 'delta':
+                xsinput = xs[:, 1:] - xs[:, :-1]
+                xsinput = rearrange(xsinput, 'n t c h w -> n (t c) h w')
+            elif self.dmode == 'innerp':
+                #shape n t s a
+                H0 = H[:, 1:]
+                H1 = H[:, :-1]
+                #this is still quite huge; very ad hoc at this point
+                xsinput = (H0 @ H1.permute([0, 1, 3, 2])).detach().reshape([-1, 16 ,256, 16])
+            elif self.dmode == 'innerpout':
+                H0 = H[:, 1:]
+                H1 = H[:, :-1]
+                xsinput = (H0.permute([0, 1, 3, 2]) @ H1).detach()
+            #Perturbation with orthogonal/mixing transformation
+            elif self.dmode in ['orth', 'mix'] :
+                # n t s a
+                device = xs.device
+                n, t, s, a = H.shape
+                if self.dmode == 'orth':
+                    P = torch.tensor(
+                        np.random.normal(size=[n, 1, s, s])).float().to(device)
+                    U, _, V = torch.linalg.svd(P)
+                    P = U @ V
+                else:
+                    P= torch.tensor(np.random.normal(size=[n, 1, s, s])).float().to(dev)
+                Pmat = P.tile(dims = (1, t, 1, 1)).float()
+                #(n t s s) @ (n t s a). s part is being transformed
+                xsinput = Pmat @ H.detach()
+            elif self.dmode == 'plainh':
+                xsinput = H.detach()
+            elif self.dmode == 'latent':
+                xsinput = H
+            #baseline Neural M Star
+            elif self.dmode == 'default':
+                xsinput = rearrange(xs, 'n t c h w -> n (t c) h w')
+            else:
+                print(f"""{self.dmode} has no implementation""" )
+                raise NotImplementedError
+            M = self.M_net(xsinput)
         M = rearrange(M, 'n (a_1 a_2) -> n a_1 a_2', a_1=self.dim_a)
         M = self.initial_scale_M * M
         return M, H
@@ -462,13 +484,13 @@ class SeqAENeuralM(SeqAELSTSQ):
 
         if return_reg_loss:
             losses = {}
-            losses['loss_bd'] = dynamics_models.loss_bd(fn.M, self.alignment) if regconfig['reg_bd'] == 'None' else 0
+            losses['reg_bd'] = dynamics_models.loss_bd(fn.M, self.alignment) if regconfig['reg_bd'] == 'None' else 0
 
-            losses['loss_orth'] = dynamics_models.loss_orth(fn.M) if regconfig['reg_orth'] == 'None' else 0
+            losses['reg_orth'] = dynamics_models.loss_orth(fn.M) if regconfig['reg_orth'] == 'None' else 0
 
-            losses['loss_comm'] = self.M_commutability(fn.M) if regconfig['reg_comm'] == 'None' else 0
+            losses['reg_comm'] = self.M_commutability(fn.M) if regconfig['reg_comm'] == 'None' else 0
 
-            losses['loss_inv'] = self.M_algebraic_inv(M, H) if regconfig['reg_inv'] == 'None' else 0
+            losses['reg_inv'] = self.M_algebraic_inv(M, H) if regconfig['reg_inv'] == 'None' else 0
             return x_preds, losses
         else:
             return x_preds
@@ -516,11 +538,22 @@ class SeqAENeuralM_latentPredict(SeqAENeuralM):
 
 
     def conduct_prediction(self, xs, n_rolls=1, T_cond=2, reconst=True,
-                           returnH= False):
+                           verbose= False):
+        predout = self.compute_H_preds(xs, n_rolls=n_rolls, T_cond=T_cond, reconst=reconst, verbose=verbose)
+        if verbose == True:
+            H_preds, _, _, M, _ = predout
+            x_preds = torch.sigmoid(self.decode(H_preds))
+            return x_preds, H_preds
+        else:
+            H_preds, _ = predout
+            x_preds = torch.sigmoid(self.decode(H_preds))
+            return x_preds
+
+    def compute_H_preds(self, xs, n_rolls=1, T_cond=2, reconst=True,
+                        verbose=False):
         xs_cond = xs[:, :T_cond]
         # H is H_cond.
         fn, M, H = self.dynamics_fn(xs_cond, verbose=True)
-        dev = xs.device
 
         # either predict from the last element or from the first element
         if reconst:
@@ -550,11 +583,10 @@ class SeqAENeuralM_latentPredict(SeqAENeuralM):
             H_last = fn(H_last)
             H_preds.append(H_last)
         H_preds = torch.cat(H_preds, axis=1)
-        x_preds = self.decode(H_preds)
-        if returnH == True:
-            return x_preds, H_preds
+        if verbose == True:
+            return H_preds, H_target, fn, M, H
         else:
-            return H_preds
+            return H_preds, H_target
 
     def __call__(self, xs,
                  n_rolls=1,
@@ -562,66 +594,48 @@ class SeqAENeuralM_latentPredict(SeqAENeuralM):
                  return_reg_loss=False,
                  return_Ms=False,
                  reconst=False, regconfig={}):
-        # ==Esitmate dynamics==
-        x_preds = self.decode(self.encode(xs))
-
-        xs_cond = xs[:, :T_cond]
-        #H is H_cond.
-        fn, M, H = self.dynamics_fn(xs_cond, verbose=True)
+        # reconstructed x
+        x_reconst = self.decode(self.encode(xs))
         dev = xs.device
 
+        H_preds, H_target, fn, M, H = self.compute_H_preds(xs, n_rolls=n_rolls, T_cond=T_cond, reconst=reconst, verbose=True)
 
-        #either predict from the last element or from the first element
-        if reconst:
-            #H = self.encode(xs)
-            if self.predictive:
-                H_target = self.encode(xs)
-                H_last = H[:, -1:]
-            else:
-                H_target = self.encode(xs[:, T_cond:]) if self.predictive else self.encode(xs)
-                H_last = H[:, :1]
-        else:
-            H_target = self.encode(xs[:, T_cond:]) if self.predictive else self.encode(xs)
-            H_last = self.encode(xs[:, -1:] if self.predictive else xs[:, :1])
-
-        #placeholder foro H_preds. If predictive, the H_preds is to include 1:t_p time sequence
-        if self.predictive:
-            H_preds = [H] if reconst else []
-            array = np.arange(n_rolls)
-        else:
-            H_preds = [H[:, :1]] if reconst else []
-            array = np.arange(xs_cond.shape[1] + n_rolls - 1)
-
-        # Create prediction for the unseen future. When predictive, this future includes the Tc part.
-        for _ in array:
-            H_last = fn(H_last)
-            H_preds.append(H_last)
-        H_preds = torch.cat(H_preds, axis=1)
         if return_reg_loss:
             losses = {}
-            losses['loss_bd'] = dynamics_models.loss_bd(fn.M, self.alignment) if regconfig['reg_bd'] != 'None' else torch.tensor([0]).to(dev)
+            losses['reg_bd'] = dynamics_models.loss_bd(fn.M, self.alignment) if regconfig['reg_bd'] != 'None' else torch.tensor([0]).to(dev)
 
-            losses['loss_orth'] = dynamics_models.loss_orth(fn.M) if regconfig['reg_orth'] != 'None' else torch.tensor([0]).to(dev)
+            losses['reg_orth'] = dynamics_models.loss_orth(fn.M) if regconfig['reg_orth'] != 'None' else torch.tensor([0]).to(dev)
 
-            losses['loss_comm'] = self.M_commutability(fn.M) if regconfig['reg_comm'] != 'None' else torch.tensor([0]).to(dev)
+            losses['reg_comm'] = self.M_commutability(fn.M) if regconfig['reg_comm'] != 'None' else torch.tensor([0]).to(dev)
 
-            losses['loss_inv'] = self.M_algebraic_inv(M, H) if regconfig['reg_inv'] != 'None' else torch.tensor([0]).to(dev)
+            losses['reg_inv'] = self.M_algebraic_inv(M, H) if regconfig['reg_inv'] != 'None' else torch.tensor([0]).to(dev)
 
-            losses['loss_latent'] = self.latent_error(H_preds, H_target) if regconfig['reg_latent'] != 'None' else torch.tensor([0]).to(dev)
+            losses['reg_latent'] = self.latent_error(H_preds, H_target) if regconfig['reg_latent'] != 'None' else torch.tensor([0]).to(dev)
 
-            return x_preds, losses
+            losses['reg_obs'] = self.obs_error(H_preds, xs) if regconfig['reg_obs'] != 'None' else torch.tensor([0]).to(dev)
+
+            return x_reconst, losses
         else:
-            return x_preds
+            return x_reconst
 
     def latent_error(self, H_preds, H_target):
         latent_e = torch.sum((H_preds - H_target)**2)
         return latent_e
 
 
-    def predict_error(self, H_preds, H_target):
-        latent_e = torch.sum((H_preds - H_target)**2)
-        return latent_e
+    def obs_error(self, H_preds, xs, reconst=True, T_cond=2):
 
+        if reconst:
+            # H = self.encode(xs)
+            if self.predictive:
+                x_target = xs
+            else:
+                x_target = xs[:, T_cond:] if self.predictive else xs
+        else:
+            x_target = xs[:, T_cond:] if self.predictive else xs
+
+        latent_e = torch.sum((torch.sigmoid(self.decode(H_preds)) - x_target)**2)
+        return latent_e
 
     def normalize_isotypic_copy(self, H):
         isotype_norm = torch.sqrt(torch.sum(H**2, axis=2, keepdims=True))
@@ -642,13 +656,13 @@ class SeqAENeuralM_latentPredict(SeqAENeuralM):
         return H
 
     def loss(self, xs, return_reg_loss=True, T_cond=2, reconst=False, regconfig={}):
-        xs_pred = self(xs, return_reg_loss=return_reg_loss, T_cond= T_cond,
+        xs_reconst = self(xs, return_reg_loss=return_reg_loss, T_cond= T_cond,
                        n_rolls=xs.shape[1] - T_cond, reconst=reconst, regconfig=regconfig)
         if return_reg_loss:
-            xs_pred, reg_losses = xs_pred
+            xs_reconst, reg_losses = xs_reconst
         xs_target = xs
         loss = torch.mean(
-            torch.sum((xs_target - torch.sigmoid(xs_pred)) ** 2, axis=[2, 3, 4]))
+            torch.sum((xs_target - torch.sigmoid(xs_reconst)) ** 2, axis=[2, 3, 4]))
         return (loss, reg_losses) if return_reg_loss else loss
 
 

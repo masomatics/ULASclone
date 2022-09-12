@@ -14,6 +14,7 @@ reg:
   reg_inv:
   reg_orth:
   reg_latent:
+  reg_obs:
 
 train_data:
   fn: ./datasets/seq_mnist.py

@@ -2,7 +2,7 @@ import torch
 import pdb
 def predict(images, model,
             n_cond=2, tp=5, device='cpu', swap =False,
-            predictive=False):
+            predictive=False, reconstructive=False):
 
     if type(images) == list:
         images = torch.stack(images)
@@ -16,13 +16,15 @@ def predict(images, model,
     if type(M) == tuple:
         M = M[0]
 
-    if predictive:
+    if predictive :
         H = model.encode(images_cond[:, [0]])[:, 0]
         tp = n_cond -1 + tp
         xs0 = images[:, [0]].to('cpu')
     else:
         H = model.encode(images_cond[:, -1:])[:, 0] # n s a
         xs0 = []
+        if reconstructive:
+            xs0 = torch.sigmoid(model.decode(model.encode(images_cond[:, :n_cond])).detach().to('cpu'))
     xs = []
     n, s, a = H.shape
 
@@ -39,3 +41,4 @@ def predict(images, model,
         x_next = torch.cat([xs0] +[x_next], axis=1)
 
     return x_next, M
+

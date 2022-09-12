@@ -88,3 +88,24 @@ def scale_specnorm(linlayer, const):
     snorm = specnorm(nn.Parameter(linlayer.weight.data))
     linlayer.weight.data = nn.Parameter(const * linlayer.weight.data / snorm)
     return linlayer
+
+
+def create_reportdict(loss , loss_dict):
+    report_dict = {'train/loss' : loss.item}
+
+    for key in list(loss_dict.keys()):
+        lossname = key.split('_')[-1]
+        keyname = f"""train/loss_{lossname}"""
+        report_dict[keyname] = loss_dict[key].item()
+    return report_dict
+
+    #
+    # {
+    #     'train/loss': loss.item(),
+    #     'train/loss_bd': loss_dict['reg_bd'].item(),
+    #     'train/loss_orth': loss_dict['reg_orth'].item(),
+    #     'train/loss_comm': loss_dict['reg_comm'].item(),
+    #     'train/loss_inv': loss_dict['reg_inv'].item(),
+    #     'train/loss_latent': loss_dict['reg_latent'].item(),
+    #     'train/loss_obs': loss_dict['reg_obs'].item(),
+    # }
