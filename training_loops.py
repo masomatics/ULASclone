@@ -41,15 +41,6 @@ def loop_seqmodel(manager, model, optimizer, train_loader, config, device):
                 report_dict = misc.create_reportdict(loss , loss_dict)
                 ppe.reporting.report(report_dict)
 
-                # ppe.reporting.report({
-                #     'train/loss': loss.item(),
-                #     'train/loss_bd': loss_dict['reg_bd'].item(),
-                #     'train/loss_orth': loss_dict['reg_orth'].item(),
-                #     'train/loss_comm': loss_dict['reg_comm'].item(),
-                #     'train/loss_inv': loss_dict['reg_inv'].item(),
-                #     'train/loss_latent': loss_dict['reg_latent'].item(),
-                #     'train/loss_obs': loss_dict['reg_obs'].item(),
-                # })
 
             if manager.stop_trigger:
                 break

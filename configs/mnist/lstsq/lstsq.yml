@@ -10,6 +10,7 @@ T_pred: 1
 lr: 0.0003
 reg:
   reg_bd:
+  reg_orth:
 
 train_data:
   fn: ./datasets/seq_mnist.py

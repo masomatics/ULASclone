@@ -86,7 +86,6 @@ class LinearTensorDynamicsLSTSQ(nn.Module):
 
         if do_detach == True:
             M_star = M_star.detach()
-        pdb.set_trace()
 
         dyn_fn = self.DynFn(M_star)
         loss_internal_T = _loss(dyn_fn(H0), H1)

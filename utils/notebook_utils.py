@@ -24,7 +24,6 @@ def load_model(model, log_dir, iters, latest=False):
         (os.path.join(log_dir, 'snapshot_model_iter_{}'.format(iters))))
 
 
-
 def load_config(targdir_path):
     targ_config_path = os.path.join(targdir_path, 'config.yml')
     with open(targ_config_path, 'r') as f:
@@ -119,3 +118,6 @@ def get_predict(targdir_path, images, swap=False, predictive=False,
         return x_next,M
     else:
         return 0, 0
+
+
+

@@ -1,5 +1,19 @@
 import torch
 import pdb
+from torch.utils.data import DataLoader
+from utils import notebook_utils as nu
+from source import yaml_utils as yu
+import numpy as np
+import os
+from tqdm import tqdm
+
+
+result_dir = '/mnt/nfs-mnj-hot-01/tmp/masomatics/block_diag/result'
+baseline_path = os.path.join(result_dir, '20220615_default_run_mnist')
+basestar_path = os.path.join(result_dir, '20220615_NeuralMstar_neuralM_vanilla')
+
+
+
 def predict(images, model,
             n_cond=2, tp=5, device='cpu', swap =False,
             predictive=False, reconstructive=False):
@@ -8,7 +22,6 @@ def predict(images, model,
         images = torch.stack(images)
         images = images.transpose(1, 0)
 
-        # pdb.set_trace()
     images = images.to(device)
     images_cond = images[:, :n_cond]
 
@@ -42,3 +55,217 @@ def predict(images, model,
 
     return x_next, M
 
+
+
+
+def prediction_evalutation(targdir_pathlist, device =0,
+                           n_cond=2, tp=1, repeats=3,
+                           predictive=False,reconstructive = False):
+    results = {}
+    inferred_Ms = {}
+    model_configs = {}
+    models = {}
+
+    for targdir_path in targdir_pathlist:
+
+        Mlist = []
+        if os.path.exists(os.path.join(targdir_path, 'config.yml')):
+            config = nu.load_config(targdir_path)
+        else:
+            config = nu.load_config(baseline_path)
+
+        dataconfig = config['train_data']
+        dataconfig['args']['T'] = tp + n_cond
+        dataconfig['args']['train'] = False
+
+        data = yu.load_component(dataconfig)
+        train_loader = DataLoader(data,
+                                  batch_size=config['batchsize'],
+                                  shuffle=True,
+                                  num_workers=config['num_workers'])
+
+        model_config = config['model']
+        model = yu.load_component(model_config)
+        iterlist = nu.iter_list(targdir_path)
+
+        if len(iterlist) == 0:
+            print(f"""There is no model trained for {targdir_path}""")
+        else:
+            maxiter = np.max(nu.iter_list(targdir_path))
+            nu.load_model(model, targdir_path, maxiter)
+            model = model.eval().to(device)
+
+            images = iter(train_loader).next()
+
+            # Initialize lazy modules
+            if type(images) == list:
+                images = torch.stack(images)
+                images = images.transpose(1, 0)
+            images = images.to(device)
+            if str(type(model)).split(' ')[-1].split('.')[-1].split("'")[
+                0] == 'SeqAENeuralM_latentPredict':
+                model.conduct_prediction(images[:, :n_cond], n_rolls=tp)
+            else:
+                model(images[:, :n_cond])
+
+            with torch.no_grad():
+                l2scores = []
+                for j in range(repeats):
+                    for images in tqdm(train_loader):
+                        if type(images) == list:
+                            images = torch.stack(images)
+                            images = images.transpose(1, 0)
+                        # n t c w h
+                        images = images.to(device)
+                        if predictive == True or reconstructive == True:
+                            images_target = images
+                        else:
+                            images_target = images[:, n_cond:n_cond + tp]
+                        x_next, M = predict(images, model, n_cond=n_cond,
+                                               tp=tp, device=device,
+                                               predictive=predictive,
+                                               reconstructive=reconstructive)
+                        l2_losses = torch.sum(
+                            (images_target.to('cpu') - x_next.to('cpu')) ** 2,
+                            axis=[-1, -2, -3])
+                        l2scores.append(l2_losses)
+
+                    Mlist.append(M)
+
+            Mlist = torch.cat(Mlist)
+
+            l2scores = torch.cat(l2scores)
+            av_l2 = torch.mean(l2scores, axis=0)
+            av_l2var = torch.std(l2scores, axis=0)
+            print(av_l2)
+            results[targdir_path] = [av_l2, av_l2var]
+
+            inferred_Ms[targdir_path] = Mlist
+            models[targdir_path] = model.to('cpu')
+            model_configs[targdir_path] = model_config
+
+    output={'results':results,
+            'Ms': inferred_Ms,
+            'configs': model_configs,
+            'models': models}
+
+    return output
+
+
+def get_predict(images, targdir_path, swap=False, predictive=False,device=0,
+                n_cond=2, tp=1):
+    if os.path.exists(os.path.join(targdir_path, 'config.yml')):
+        config = nu.load_config(targdir_path)
+    else:
+        config = nu.load_config(baseline_path)
+
+    # config = load_config(targdir_path)
+
+    model_config = config['model']
+    if len(nu.iter_list(targdir_path)) > 0:
+        maxiter = np.max(nu.iter_list(targdir_path))
+        model = yu.load_component(model_config).to(device)
+        nu.load_model(model, targdir_path, maxiter)
+        model = model.eval().to(device)
+        # model(images[:, :2])
+        if str(type(model)).split(' ')[-1].split('.')[-1].split("'")[
+            0] == 'SeqAENeuralM_latentPredict':
+            model.conduct_prediction(images[:, :n_cond], n_rolls=tp)
+        else:
+            model(images[:, :n_cond])
+        x_next, M = predict(images, model, n_cond=n_cond, tp=tp,
+                               device=device, swap=swap,
+                               predictive=predictive)
+        return x_next, M
+    else:
+        return 0, 0
+
+
+def equiv_evalutation(targdir_pathlist, device =0,
+                           n_cond=2, tp=1, repeats=3):
+    equiv_results = {}
+    inferred_Ms = {}
+    for targdir_path in targdir_pathlist:
+
+        Mlist = []
+        if os.path.exists(os.path.join(targdir_path, 'config.yml')):
+            config = nu.load_config(targdir_path)
+        else:
+            config = nu.load_config(baseline_path)
+
+        dataconfig = config['train_data']
+        dataconfig['args']['train'] = False
+        dataconfig['args']['shared_transition'] = 1
+        dataconfig['args']['T'] = tp + n_cond
+
+        data = yu.load_component(dataconfig)
+        train_loader = DataLoader(data,
+                                  batch_size=config['batchsize'],
+                                  shuffle=True,
+                                  num_workers=config['num_workers'])
+        model = yu.load_component(config['model'])
+        iterlist = nu.iter_list(targdir_path)
+
+        if len(iterlist) == 0:
+            print(f"""There is no model trained for {targdir_path}""")
+        else:
+            maxiter = np.max(nu.iter_list(targdir_path))
+            nu.load_model(model, targdir_path, maxiter)
+            model = model.eval().to(device)
+
+            # Initialize lazy modules
+            images = iter(train_loader).next()
+            # Initialize lazy modules
+            if type(images) == list:
+                images = torch.stack(images)
+                images = images.transpose(1, 0)
+
+            images = images.to(device)
+
+            if str(type(model)).split(' ')[-1].split('.')[-1].split("'")[
+                0] == 'SeqAENeuralM_latentPredict':
+                model.conduct_prediction(images[:, :n_cond], n_rolls=tp)
+            else:
+                model(images[:, :n_cond])
+
+            with torch.no_grad():
+                l2scores = []
+
+                for j in range(repeats):
+                    for images in tqdm(train_loader):
+
+                        if type(images) == list:
+                            images = torch.stack(images)
+                            images = images.transpose(1, 0)
+                            # n t c w h
+                        images = images.to(device)
+                        images_target = images[:, n_cond:n_cond + tp]
+
+                        x_next_perm, M = predict(images, model,
+                                                    n_cond=n_cond, tp=tp,
+                                                    device=device, swap=True)
+
+                        l2_losses = torch.sum((images_target.to(
+                            'cpu') - x_next_perm.to('cpu')) ** 2,
+                                              axis=[-1, -2, -3])
+                        l2scores.append(l2_losses)
+
+                        Mlist.append(M)
+
+                        train_loader.dataset.init_shared_transition_parameters()
+
+
+            Mlist = torch.cat(Mlist)
+            scores = torch.cat(l2scores)
+            print(l2_losses.shape)
+            print(scores.shape)
+            av_score = torch.mean(scores, axis=0)
+            av_std = torch.std(scores, axis=0)
+            print(f"""mean: {av_score}""")
+            print(f"""std: {av_std}""")
+            equiv_results[targdir_path] = [av_score, av_std]
+            inferred_Ms[targdir_path] = Mlist
+    output ={'equiv_results': equiv_results,
+             'Ms' : inferred_Ms}
+
+    return output
