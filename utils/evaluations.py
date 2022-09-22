@@ -8,12 +8,18 @@ import os
 from tqdm import tqdm
 
 
+
+'''
+Snippets from the functions used in the notebooks
+
+'''
+
 result_dir = '/mnt/nfs-mnj-hot-01/tmp/masomatics/block_diag/result'
 baseline_path = os.path.join(result_dir, '20220615_default_run_mnist')
 basestar_path = os.path.join(result_dir, '20220615_NeuralMstar_neuralM_vanilla')
 
 
-
+#might be overlapping with get_predict
 def predict(images, model,
             n_cond=2, tp=5, device='cpu', swap =False,
             predictive=False, reconstructive=False):
