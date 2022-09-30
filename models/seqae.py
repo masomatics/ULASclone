@@ -467,7 +467,7 @@ class SeqAENeuralM(SeqAELSTSQ):
         else:
             H_last = self.encode(xs[:, -1:] if self.predictive else xs[:, :1])
 
-        #placeholder foro H_preds. If predictive, the H_preds is to include 1:t_p time sequence
+        #placeholder foro H_preds. If predictive is false, the H_preds is to include 1:t_p time sequence
         if self.predictive:
             H_preds = [H] if reconst else []
             array = np.arange(n_rolls)
@@ -475,7 +475,7 @@ class SeqAENeuralM(SeqAELSTSQ):
             H_preds = [H[:, :1]] if reconst else []
             array = np.arange(xs.shape[1] + n_rolls - 1)
 
-        # Create prediction for the unseen future. When predictive, this future includes the Tc part.
+        # Create prediction for the unseen future. When predictive is false, this future includes the Tc part.
         for _ in array:
             H_last = fn(H_last)
             H_preds.append(H_last)
@@ -619,7 +619,7 @@ class SeqAENeuralM_latentPredict(SeqAENeuralM):
             return x_reconst
 
     def latent_error(self, H_preds, H_target):
-        latent_e = torch.sum((H_preds - H_target)**2)
+        latent_e = torch.mean((H_preds - H_target)**2)
         return latent_e
 
 
@@ -638,7 +638,7 @@ class SeqAENeuralM_latentPredict(SeqAENeuralM):
         return latent_e
 
     def normalize_isotypic_copy(self, H):
-        isotype_norm = torch.sqrt(torch.sum(H**2, axis=2, keepdims=True))
+        isotype_norm = torch.sqrt(torch.sum(H**2, axis=3, keepdims=True))
         H = H/isotype_norm
         return H
 

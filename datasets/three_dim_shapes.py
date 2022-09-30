@@ -41,8 +41,7 @@ class ThreeDimShapesDataset(object):
         self.transforms = transforms
         self.active_actions = active_actions
         self.force_moving = force_moving
-        self.rng = rng if rng is not None else np.random.RandomState(
-            np.random.randint(123456789))
+        self.rng = rng if rng is not None else np.random
         self.shared_transition = shared_transition
         if self.shared_transition:
             self.init_shared_transition_parameters()

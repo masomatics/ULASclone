@@ -37,8 +37,7 @@ class SequentialMNIST():
     ):
         self.T = T
         self.max_T = max_T
-        self.rng = rng if rng is not None else np.random.RandomState(
-            np.random.randint(1234))
+        self.rng =  rng if rng is not None else np.random
         self.transforms = transforms
         self.data = torchvision.datasets.MNIST(root, train, download=True)
         self.angle_velocity_range = (-max_angle_velocity_ratio, max_angle_velocity_ratio) if isinstance(

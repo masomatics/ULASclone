@@ -83,12 +83,15 @@ def prediction_evalutation(targdir_pathlist, device =0,
         dataconfig = config['train_data']
         dataconfig['args']['T'] = tp + n_cond
         dataconfig['args']['train'] = False
+        dataconfig['args']['max_T'] = tp + n_cond + 1
+
 
         data = yu.load_component(dataconfig)
         train_loader = DataLoader(data,
                                   batch_size=config['batchsize'],
                                   shuffle=True,
                                   num_workers=config['num_workers'])
+        print(dataconfig)
 
         model_config = config['model']
         model = yu.load_component(model_config)
@@ -100,19 +103,6 @@ def prediction_evalutation(targdir_pathlist, device =0,
             maxiter = np.max(nu.iter_list(targdir_path))
             nu.load_model(model, targdir_path, maxiter)
             model = model.eval().to(device)
-
-            images = iter(train_loader).next()
-
-            # Initialize lazy modules
-            if type(images) == list:
-                images = torch.stack(images)
-                images = images.transpose(1, 0)
-            images = images.to(device)
-            if str(type(model)).split(' ')[-1].split('.')[-1].split("'")[
-                0] == 'SeqAENeuralM_latentPredict':
-                model.conduct_prediction(images[:, :n_cond], n_rolls=tp)
-            else:
-                model(images[:, :n_cond])
 
             with torch.no_grad():
                 l2scores = []
@@ -155,7 +145,7 @@ def prediction_evalutation(targdir_pathlist, device =0,
             'configs': model_configs,
             'models': models}
 
-    return output
+    return output, images_target.to('cpu'), x_next.to('cpu')
 
 
 def get_predict(images, targdir_path, swap=False, predictive=False,device=0,
