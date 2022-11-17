@@ -42,6 +42,7 @@ model:
     dmode: default
     mnet_mlp: 0
     predictive:
+    normalize:
 
 
 

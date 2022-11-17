@@ -109,3 +109,4 @@ def create_reportdict(loss , loss_dict):
     #     'train/loss_latent': loss_dict['reg_latent'].item(),
     #     'train/loss_obs': loss_dict['reg_obs'].item(),
     # }
+

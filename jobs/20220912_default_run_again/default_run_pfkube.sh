@@ -1,0 +1,1 @@
+pfkube run --job-name=default-run --gpu=1 --persist --cpu=8 --memory=48Gi --allow-overwrite --no-attach-logs -o nodeSelector="nvidia.k8s.pfn.io/gpu_model: Tesla-V100-SXM2-32GB" eval "cd /mnt/vol21/masomatics/ULASclone && pip install einops && pip install opencv-python && pip install scikit-image && python ./jobs/20220912_default_run_again/default_run_mnist.sh"

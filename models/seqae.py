@@ -363,6 +363,7 @@ class SeqAENeuralM(SeqAELSTSQ):
             t_c = 2,
             dmode='default',
             mnet_mlp=False,
+            normalize=3,
             *args,
             **kwargs):
         super(SeqAELSTSQ, self).__init__()
@@ -372,6 +373,8 @@ class SeqAENeuralM(SeqAELSTSQ):
         self.alignment = alignment
         self.dmode = dmode
         self.initial_scale_M = 0.01
+        self.normalize = normalize
+
         self.enc = ResNetEncoder(
             dim_a*dim_m, k=k, kernel_size=kernel_size, n_blocks=n_blocks)
         self.t_c = t_c
@@ -622,7 +625,6 @@ class SeqAENeuralM_latentPredict(SeqAENeuralM):
         latent_e = torch.mean((H_preds - H_target)**2)
         return latent_e
 
-
     def obs_error(self, H_preds, xs, reconst=True, T_cond=2):
 
         if reconst:
@@ -638,7 +640,7 @@ class SeqAENeuralM_latentPredict(SeqAENeuralM):
         return latent_e
 
     def normalize_isotypic_copy(self, H):
-        isotype_norm = torch.sqrt(torch.sum(H**2, axis=3, keepdims=True))
+        isotype_norm = torch.sqrt(torch.sum(H**2, axis=self.normalize, keepdims=True))
         H = H/isotype_norm
         return H
 

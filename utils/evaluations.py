@@ -35,7 +35,7 @@ def predict(images, model,
     if type(M) == tuple:
         M = M[0]
 
-    if predictive :
+    if predictive:
         H = model.encode(images_cond[:, [0]])[:, 0]
         tp = n_cond -1 + tp
         xs0 = images[:, [0]].to('cpu')
@@ -64,13 +64,14 @@ def predict(images, model,
 
 
 
-def prediction_evalutation(targdir_pathlist, device =0,
+def prediction_evaluation(targdir_pathlist, device =0,
                            n_cond=2, tp=1, repeats=3,
                            predictive=False,reconstructive = False):
     results = {}
     inferred_Ms = {}
     model_configs = {}
     models = {}
+    all_configs = {}
 
     for targdir_path in targdir_pathlist:
 
@@ -82,11 +83,19 @@ def prediction_evalutation(targdir_pathlist, device =0,
 
         dataconfig = config['train_data']
         dataconfig['args']['T'] = tp + n_cond
-        dataconfig['args']['train'] = False
-        dataconfig['args']['max_T'] = tp + n_cond + 1
+        try:
+            # IF double dataset, we work with same objects
+            if dataconfig['name'] == 'SequentialMNIST_double':
+                dataconfig['args']['train'] = True
+            else:
+                dataconfig['args']['train'] = False
+        except:
+            print("Not working with the pair dataset")
+        dataconfig['args']['max_T'] = tp + n_cond
 
 
         data = yu.load_component(dataconfig)
+
         train_loader = DataLoader(data,
                                   batch_size=config['batchsize'],
                                   shuffle=True,
@@ -126,9 +135,9 @@ def prediction_evalutation(targdir_pathlist, device =0,
                             axis=[-1, -2, -3])
                         l2scores.append(l2_losses)
 
-                    Mlist.append(M)
+                        Mlist.append(M.detach().to('cpu'))
 
-            Mlist = torch.cat(Mlist)
+                    Mlist = torch.cat(Mlist)
 
             l2scores = torch.cat(l2scores)
             av_l2 = torch.mean(l2scores, axis=0)
@@ -139,10 +148,11 @@ def prediction_evalutation(targdir_pathlist, device =0,
             inferred_Ms[targdir_path] = Mlist
             models[targdir_path] = model.to('cpu')
             model_configs[targdir_path] = model_config
+            all_configs[targdir_path] = config
 
     output={'results':results,
             'Ms': inferred_Ms,
-            'configs': model_configs,
+            'configs': all_configs,
             'models': models}
 
     return output, images_target.to('cpu'), x_next.to('cpu')
@@ -176,6 +186,18 @@ def get_predict(images, targdir_path, swap=False, predictive=False,device=0,
     else:
         return 0, 0
 
+'''
+####################################################################################
+###########
+###########
+###########
+###########EQUIV EVALUATIONS
+###########
+###########
+###########
+###########
+##################################################################
+'''
 
 def equiv_evalutation(targdir_pathlist, device =0,
                            n_cond=2, tp=1, repeats=3):
