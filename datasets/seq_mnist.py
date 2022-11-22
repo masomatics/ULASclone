@@ -161,7 +161,14 @@ class SequentialMNIST():
         else:
             return images
 
+'''
+Sequential MNIST with two objects.
 
+If fixpos is True, there won't be translation.
+If pair_translation is True, same action will be applied to both objects.
+
+By default, the initial positioning is fixed.
+'''
 
 class SequentialMNIST_double(SequentialMNIST):
     def __init__(
@@ -186,7 +193,8 @@ class SequentialMNIST_double(SequentialMNIST):
             pair_transition=False,
             same_object=True,
             rng=None,
-            fixpos=True):
+            fixpos=True, param_debug=False,
+            align_initial=False):
         super().__init__(root,
             train=train,
             transforms=transforms,
@@ -212,11 +220,14 @@ class SequentialMNIST_double(SequentialMNIST):
         self.pair_transition = pair_transition
         self.same_object = same_object
         self.fixpos = fixpos
+        self.param_debug= param_debug
 
         #DEBUGGING PURPOSE: Default is False
-        self.align_initial = False
+        self.align_initial = align_initial
 
-        if self.fixpos == True:
+
+
+        if True:
             # pos0 : pos0_obj0, pos0_obj1
             # pos1 : pos1_obj0, pos1_obj1
 
@@ -244,10 +255,13 @@ class SequentialMNIST_double(SequentialMNIST):
 
     def __getitem__(self, i):
 
-        if self.fixpos == True:
-            pos0, pos1 = self.pairpos0, self.pairpos1
-        else:
-            pos0, pos1 = self.initial_poss()
+        # if self.fixpos == True:
+        #     pos0, pos1 = self.pairpos0, self.pairpos1
+        # else:
+        #     pos0, pos1 = self.initial_poss()
+        #pos0, pos1 = self.pairpos0, self.pairpos1
+        pos0, pos1 = self.initial_poss()
+        pos0 = self.pairpos0
 
         if self.same_object == True:
             first_idx = 1
@@ -262,7 +276,6 @@ class SequentialMNIST_double(SequentialMNIST):
             params1 = self.otain_action_parameters(pos0[1], pos1[1])
 
 
-
         else:
             # If running experiment with all sequences consisting of the same object
             params0 = self.otain_action_parameters(pos0[0], pos1[0])
@@ -270,14 +283,20 @@ class SequentialMNIST_double(SequentialMNIST):
 
             #param1 is the same as param0 all except at initial position, angle and color
             params1['pos0'], params1['pos1'] = pos0[1], pos1[1]
+
             angle_0 = self.rng.uniform(0, 2 * math.pi, size=1)
             color_0 = self.rng.uniform(0, 1, size=1)
             params1['angles_0'], params1['color_0'] = angle_0, color_0
+            params1['pos_v'] = params0['pos_v']
+
+
 
         if self.align_initial == True:
             params1['angles_0'], params1['color_0'] = params0['angles_0'], params0['color_0']
 
 
+        if self.param_debug==True:
+            return params0, params1
 
         images0 = self.get_image(first_idx, **params0)
         images1 = self.get_image(second_idx, **params1)
@@ -317,12 +336,13 @@ class SequentialMNIST_double(SequentialMNIST):
 
         else:
 
-
             pos0, pos1 = self.pairpos0, self.pairpos1
             params0 = self.otain_action_parameters(pos0[0], pos1[0])
 
             params1 = copy.deepcopy(params0)
             params1['pos0'], params1['pos1'] = pos0[1], pos1[1]
+            params1['pos_v'] = params0['pos_v']
+
             angle_0 = self.rng.uniform(0, 2 * math.pi, size=1)
             color_0 = self.rng.uniform(0, 1, size=1)
             params1['angles_0'], params1['color_0'] = angle_0, color_0
@@ -387,7 +407,7 @@ class SequentialMNIST_double(SequentialMNIST):
         action_params['color_a'] = color_a
         action_params['pos0'] = pos0
         action_params['pos_v'] = pos_v
-        action_params['pos_a'] = pos_a
+        action_params['pos_a'] = 0
         action_params['pos1'] = pos1
 
         return action_params
@@ -414,41 +434,19 @@ class SequentialMNIST_double(SequentialMNIST):
         image = cv2.copyMakeBorder(
             image, margin , margin , margin , margin , cv2.BORDER_CONSTANT, value=(0, 0, 0))
 
-        # angles_0 = self.rng.uniform(0, 2 * math.pi, size=1)
-        # color_0 = self.rng.uniform(0, 1, size=1)
-        #
-        # if self.shared_transition:
-        #     (angles_v, angles_a) = (self.angles_v, self.angles_a)
-        #     (color_v, color_a) = (self.color_v, self.color_a)
-        #     (pos_v, pos_a) = (self.pos_v, self.pos_a)
-        # else:
-        #     angles_v = self.rng.uniform(
-        #         math.pi * self.angle_velocity_range[0],
-        #         math.pi * self.angle_velocity_range[1], size=1)
-        #     angles_a = self.rng.uniform(math.pi * self.angle_accl_range[0],
-        #                                 math.pi * self.angle_accl_range[1],
-        #                                 size=1)
-        #     color_v = 0.5 * self.rng.uniform(self.color_velocity_range[0],
-        #                                      self.color_velocity_range[1],
-        #                                      size=1)
-        #     color_a = 0.5 * \
-        #               self.rng.uniform(
-        #                   self.color_accl_range[0],
-        #                   self.color_accl_range[1], size=1)
-        #     pos_v = (pos1 - pos0) / (self.max_T - 1)
-        #     pos_a = self.rng.uniform(
-        #         self.max_trans_accl[0], self.max_trans_accl[1], size=[2])
-
         images = []
 
         for t in range(self.T):
             if immobile == False:
                 angles_t = 0.5 * angles_a * t ** 2 + angles_v * t + angles_0
-                ###
-                # Freeze translation
-                ###
-                #pos_t = 0.5 * pos_a * t ** 2 + pos_v * t + pos0
-                pos_t = pos0
+
+                if self.fixpos == False:
+                    ###
+                    # Freeze translation
+                    ###
+                    pos_t = 0.5 * pos_a * t ** 2 + pos_v * t + pos0
+                else:
+                    pos_t = pos0
                 color_t = (0.5 * color_a * t ** 2 + t * color_v + color_0) % 1
             if immobile == True:
                 angles_t = angles_0

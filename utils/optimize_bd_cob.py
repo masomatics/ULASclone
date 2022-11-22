@@ -113,7 +113,7 @@ def obtain_blocks_old(M):
     return partitions
 
 
-def obtain_blocks(M):
+def obtain_blocks(M, threshconst=1.0):
     alldims = list(range(M.shape[1]))
     partitions = []
     def removelist(mylist, toberemoved):
@@ -127,7 +127,7 @@ def obtain_blocks(M):
         #idx = alldims[np.random.choice(len(alldims))]
         idx = alldims[0]
         deviate = M[idx] - torch.mean(M[idx])
-        thresh = torch.std(deviate)
+        thresh = threshconst * torch.std(deviate)
         preblock = list(np.where(deviate > thresh)[0])
         partitions = mergelist(partitions, preblock)
         block = partitions[-1]

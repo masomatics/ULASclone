@@ -7,6 +7,7 @@ import copy
 from source import yaml_utils as yu
 from utils import notebook_utils as nu
 from datasets import seq_mnist as sm
+import numpy as np
 
 class ChangeOfBasisR(torch.nn.Module):
     def __init__(self, d, Pmat=torch.tensor([]), reg=0.0):
@@ -97,7 +98,6 @@ def covariance(H):
 
         EH = torch.mean(H, axis=[0,1])
         EHEH = torch.einsum('s a, r a -> s r', EH, EH)
-        pass
 
     else:
         EH2 = torch.einsum('t s a, t r a -> t s r', H, H)
@@ -107,6 +107,15 @@ def covariance(H):
         EHEH = torch.einsum('s a, r a -> s r', EH, EH)
     covariance = EH2 - EHEH
     return covariance
+
+def correlation(H):
+    covmat = covariance(H)
+    diagval = 1./torch.sqrt(torch.abs(torch.diag(covmat)))
+    diagmat = torch.diag(diagval)
+    cormat = diagmat @ covmat @ diagmat
+    return cormat
+
+
 
 
 def innerprod(H):
@@ -127,7 +136,8 @@ def optimize_cov_blocks(H,
                     n_epochs=2000,
                     epochs_monitor=500,
                     verbose=False,
-                    lr=0.02, normalize=True):
+                    lr=0.02, normalize=True,
+                    cor=False):
     # Optimize change of basis matrix U by minimizing block diagonalization loss
     #Change of basis R is to be applied to  b t s a shape for t s a shape, acting on s dimension
     change_of_basis = ChangeOfBasisR(d=H.shape[-2], reg=0.0).to(H.device)
@@ -136,7 +146,10 @@ def optimize_cov_blocks(H,
     for ep in range(n_epochs):
         total_loss, total_N = 0, 0
         HP = change_of_basis(H)
-        covHP = torch.abs(covariance(HP))
+        if cor == True:
+            covHP = torch.abs(correlation(HP))
+        else:
+            covHP = torch.abs(covariance(HP))
         loss = torch.mean(obc.tracenorm_of_normalized_laplacian(covHP))
         optimizer.zero_grad()
         loss.backward()
@@ -148,7 +161,7 @@ def optimize_cov_blocks(H,
     if normalize == True:
         change_of_basis.normalize_vec()
     if verbose:
-        return change_of_basis, torch.tensor(loss_rec)
+        return change_of_basis, torch.tensor(loss_rec), covHP.detach()
     else:
         return change_of_basis
 
@@ -159,7 +172,37 @@ def obtain_pair_sequence(checkmodelpath, check_idx=0, T=30):
     double_dat = sm.SequentialMNIST_double(**data_args)
     datseq = double_dat.one_obj_immobile(check_idx)
     datseq_two = double_dat.one_obj_immobile(check_idx, mode=0)
+
+    datseq = [torch.tensor(datseq[k]) for k in range(len(datseq_two))]
+    datseq_two = [torch.tensor(datseq_two[k]) for k in range(len(datseq_two))]
     return datseq, datseq_two
+
+def obtain_pair_sequences(checkmodelpath, size=30, seed=0, T=30):
+    config = nu.load_config(checkmodelpath)
+    data_args = config['train_data']['args']
+    data_args['T'] = T
+    double_dat = sm.SequentialMNIST_double(**data_args)
+    np.random.seed(seed)
+    picked = np.random.choice(len(double_dat.data), size)
+
+    datseq_ones = []
+    datseq_twos = []
+    for check_idx in range(len(picked)):
+
+        datseq = double_dat.one_obj_immobile(check_idx)
+        datseq_two = double_dat.one_obj_immobile(check_idx, mode=0)
+
+        datseq = torch.stack([torch.tensor(datseq[k]) for k in range(len(datseq_two))])
+        datseq_two = torch.stack([torch.tensor(datseq_two[k]) for k in
+                      range(len(datseq_two))])
+        datseq_ones.append(datseq)
+        datseq_twos.append(datseq_two)
+
+    datseq_ones = torch.stack(datseq_ones)
+    datseq_twos = torch.stack(datseq_twos)
+
+    return datseq_ones, datseq_twos
+
 
 
 

@@ -126,7 +126,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.variation_path, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.safe_load(f)
 
     #Modify the yaml file using attr
     for attr in args.attrs:
@@ -134,7 +134,7 @@ if __name__ == '__main__':
         keys = module.split('.')
         target = functools.reduce(dict.__getitem__, keys[:-1], config)
         if keys[-1] in target.keys():
-            target[keys[-1]] = yaml.load(new_value)
+            target[keys[-1]] = yaml.safe_load(new_value)
         else:
             raise ValueError('the specified key does not exist:{}', keys)
 
