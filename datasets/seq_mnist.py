@@ -34,7 +34,7 @@ class SequentialMNIST():
             only_use_digit4=False,
             backgrnd=False,
             shared_transition=False,
-            rng=None
+            rng=None, **kwargs
     ):
         self.T = T
         self.max_T = max_T
@@ -228,17 +228,20 @@ class SequentialMNIST_double(SequentialMNIST):
 
 
         if True:
+        #if fixpos == True:
             # pos0 : pos0_obj0, pos0_obj1
             # pos1 : pos1_obj0, pos1_obj1
 
             #np.random.seed(1)
-            #self.pairpos0 , self.pairpos1 = self.initial_poss()
+
             self.pairpos0 = np.array([[-4.01038611, -6.21961682],
                                       [-4.44810926, 5.9317169 ]
                                        ])
             self.pairpos1 = np.array([[-4.69249351, 6.69777453],
                                       [8.62280464, 3.90062484]])
-
+        #
+        #else:
+        #    self.pairpos0 , self.pairpos1 = self.initial_poss()
 
     def initial_poss(self):
 
@@ -246,7 +249,7 @@ class SequentialMNIST_double(SequentialMNIST):
         pos1 = [] #pos1_obj0, pos1_obj1
 
         pos0.append(self.rng.uniform(self.max_pos[0], self.max_pos[1], size=[2]))
-        pos0.append(self.rng.uniform(self.max_pos[0], self.max_pos[1], size=[2]))
+        pos0.append(self.rng.uniform(self.max_pos[1], self.max_pos[1], size=[2]))
 
         pos1.append(self.rng.uniform(pos0[0], self.max_pos[0]-pos0[0], size=[2]))
         pos1.append(self.rng.uniform(pos0[1], self.max_pos[1]-pos0[1], size=[2]))
@@ -255,13 +258,12 @@ class SequentialMNIST_double(SequentialMNIST):
 
     def __getitem__(self, i):
 
-        # if self.fixpos == True:
-        #     pos0, pos1 = self.pairpos0, self.pairpos1
-        # else:
-        #     pos0, pos1 = self.initial_poss()
-        #pos0, pos1 = self.pairpos0, self.pairpos1
         pos0, pos1 = self.initial_poss()
-        pos0 = self.pairpos0
+        if self.fixpos == True:
+            #pos0, pos1 = self.pairpos0, self.pairpos1
+            pos0 = self.pairpos0
+        # pos0, pos1 = self.initial_poss()
+        # pos0 = self.pairpos0
 
         if self.same_object == True:
             first_idx = 1
@@ -293,6 +295,7 @@ class SequentialMNIST_double(SequentialMNIST):
 
         if self.align_initial == True:
             params1['angles_0'], params1['color_0'] = params0['angles_0'], params0['color_0']
+
 
 
         if self.param_debug==True:

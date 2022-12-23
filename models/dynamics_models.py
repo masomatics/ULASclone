@@ -5,6 +5,13 @@ from utils.laplacian import make_identity_like, tracenorm_of_normalized_laplacia
 import einops
 import pytorch_pfn_extras as ppe
 import pdb
+from models import misc_mnet as mnet
+import torch.autograd as autograd
+import pickle
+import copy
+from models import misc_mnet as mnet
+from torch.autograd import Variable
+
 
 
 def _rep_M(M, T):
@@ -101,6 +108,116 @@ class LinearTensorDynamicsLSTSQ(nn.Module):
         else:
             return dyn_fn
 
+class LinearTensorDynamicsLSTSQ_inner(nn.Module):
+
+    class DynFn(nn.Module):
+        def __init__(self, M):
+            super().__init__()
+            self.M = M
+
+        def __call__(self, H):
+            return H @ _rep_M(self.M[:H.shape[0]], T=H.shape[1])
+
+
+    def __init__(self, alignment=True, inner_args={}, verbose=False):
+        super().__init__()
+        self.alignment = alignment
+        self.mode = inner_args['mode']
+        self.inner_args = inner_args
+        self.verbose=verbose
+
+        #torch tensor : n a a   (make it into a a and repeat afterward)
+        #self.Meta_M = Variable(torch.tensor(einops.repeat(torch.eye(inner_args['dim_a']), 'c a -> b c a', b = inner_args['batchsize'])), requires_grad=True)
+        self.Meta_M = nn.Parameter(torch.tensor(np.random.normal(size=(inner_args['batchsize'], inner_args['dim_a'], inner_args['dim_a']))).float())
+
+        if self.mode == 'glasso_contrastive':
+            self.inner_loss = mnet.loss_group_lasso_contrastive
+        elif self.mode == 'glasso':
+            self.inner_loss = mnet.loss_glasso_norm
+        elif self.mode == 'exact':
+            self.inner_loss = mnet.loss_l2_norm
+        else:
+            raise NotImplementedError
+
+    def __call__(self, H, return_loss=False, fix_indices=None, do_detach=False):
+        # Regress M.
+        # Note: backpropagation is disabled when fix_indices is not None.
+
+        # H0.shape = H1.shape [n, t, s, a]
+        H0, H1 = H[:, :-1], H[:, 1:]
+        # num_ts x ([len_ts -1] * dim_s) x dim_a
+        # The difference between the the time shifted components
+        loss_internal_0 = _loss(H0, H1)
+        ppe.reporting.report({
+            'loss_internal_0': loss_internal_0.item()
+        })
+        _H0 = H0.reshape(H0.shape[0], -1, H0.shape[-1])
+        _H1 = H1.reshape(H1.shape[0], -1, H1.shape[-1])
+        if fix_indices is not None:
+            # Note: backpropagation is disabled.
+            dim_a = _H0.shape[-1]
+            active_indices = np.array(list(set(np.arange(dim_a)) - set(fix_indices)))
+            _M_star = self.compute_M(_H0[:, :, active_indices],
+                             _H1[:, :, active_indices])
+            M_star = make_identity(_H1.shape[0], _H1.shape[-1], _H1.device)
+            M_star[:, active_indices[:, np.newaxis], active_indices] = _M_star
+        else:
+            M_star = self.compute_M(_H0, _H1)
+
+        if do_detach == True:
+            M_star = M_star.detach()
+
+        dyn_fn = self.DynFn(M_star)
+        loss_internal_T = _loss(dyn_fn(H0), H1)
+        ppe.reporting.report({
+            'loss_internal_T': loss_internal_T.item()
+        })
+
+        # M_star is returned in the form of module, not the matrix
+        if return_loss:
+            losses = (loss_bd(dyn_fn.M, self.alignment),
+                      loss_orth(dyn_fn.M), loss_internal_T)
+            return dyn_fn, losses
+        else:
+            return dyn_fn
+
+    #https: // github.com / fmu2 / PyTorch - MAML / tree / master / models
+    def compute_M(self, H0, H1):
+        #borrow much from NeuralM
+        '''
+        Compute the argmin with inner loop.
+        '''
+        # self.mobject.Ms.data.copy_(torch.eye(16))
+        # print(self.mobject.Ms)
+
+        #if self.verbose: print("="*10)
+
+        meta_M = 1. * self.Meta_M
+        if meta_M.requires_grad == False: meta_M.requires_grad=True
+
+        with torch.enable_grad():
+
+            for j in range(self.inner_args['num_loops']):
+                H1hat = H0 @ meta_M[:H0.shape[0]]
+                loss = self.inner_loss(H1hat, H1)
+                if self.verbose: print(f"""inner_loss {loss.item()}""")
+                grads = autograd.grad(loss, meta_M,
+                                          create_graph=(not self.inner_args['detach']),
+                                          only_inputs=True, allow_unused=True)
+
+                # parameter update
+                #for param, grad in zip(self.parameters(), grads):
+                meta_M = meta_M - self.inner_args['lr'] * grads[0]
+
+                # self.Meta_M = self.Meta_M -  self.inner_args['lr'] * grads[0][0]
+        if self.verbose: print("-"*10)
+        Mstar = meta_M
+
+        return Mstar
+
+def justsave(path, obj):
+    with open(path, 'wb') as fp:
+        pickle.dump(obj, fp)
 
 class HigherOrderLinearTensorDynamicsLSTSQ(LinearTensorDynamicsLSTSQ):
 

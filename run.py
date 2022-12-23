@@ -36,6 +36,7 @@ def train(config):
         data, batch_size=config['batchsize'], shuffle=True, num_workers=config['num_workers'])
 
     # Def. of Model and optimizer
+
     model = yu.load_component(config['model'])
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), config['lr'])

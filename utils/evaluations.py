@@ -52,7 +52,7 @@ def predict(images, model,
         M = M[torch.arange(-n//2, n-n//2)]
 
     for r in range(tp):
-        H = H @ M
+        H = H @ M[:H.shape[0]]
         x_next_t = model.decode(H[:, None])
         xs.append(x_next_t)
     x_next = torch.sigmoid(torch.cat(xs, axis=1).detach().to('cpu'))
@@ -66,7 +66,8 @@ def predict(images, model,
 
 def prediction_evaluation(targdir_pathlist, device =0,
                            n_cond=2, tp=1, repeats=3,
-                           predictive=False,reconstructive = False):
+                           predictive=False,reconstructive = False,
+                          alteration={}):
     results = {}
     inferred_Ms = {}
     model_configs = {}
@@ -80,6 +81,8 @@ def prediction_evaluation(targdir_pathlist, device =0,
             config = nu.load_config(targdir_path)
         else:
             config = nu.load_config(baseline_path)
+
+        config = yu.alter_config(config, alteration)
 
         dataconfig = config['train_data']
         dataconfig['args']['T'] = tp + n_cond
@@ -106,11 +109,17 @@ def prediction_evaluation(targdir_pathlist, device =0,
         model = yu.load_component(model_config)
         iterlist = nu.iter_list(targdir_path)
 
+
+
         if len(iterlist) == 0:
             print(f"""There is no model trained for {targdir_path}""")
         else:
             maxiter = np.max(nu.iter_list(targdir_path))
-            nu.load_model(model, targdir_path, maxiter)
+
+            try:
+                nu.load_model(model, targdir_path, maxiter)
+            except:
+                pdb.set_trace()
             model = model.eval().to(device)
 
             with torch.no_grad():
@@ -287,3 +296,5 @@ def equiv_evalutation(targdir_pathlist, device =0,
              'Ms' : inferred_Ms}
 
     return output
+
+

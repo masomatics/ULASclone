@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from models import dynamics_models
 import torch.nn.utils.parametrize as P
-from models.dynamics_models import LinearTensorDynamicsLSTSQ, MultiLinearTensorDynamicsLSTSQ, HigherOrderLinearTensorDynamicsLSTSQ
+from models.dynamics_models import LinearTensorDynamicsLSTSQ, MultiLinearTensorDynamicsLSTSQ, HigherOrderLinearTensorDynamicsLSTSQ, LinearTensorDynamicsLSTSQ_inner
 from models.base_networks import ResNetEncoder, ResNetDecoder, Conv1d1x1Encoder, MLP_iResNet, LinearNet, MLP
 from models import base_networks as bn
 from einops import rearrange, repeat
@@ -12,6 +12,11 @@ import pdb
 from sklearn.metrics import r2_score
 import copy
 from utils import misc
+import einops
+import torch.autograd as autograd
+from models import misc_mnet as mnet
+from collections import OrderedDict
+
 
 class SeqAELSTSQ(nn.Module):
     def __init__(
@@ -68,6 +73,8 @@ class SeqAELSTSQ(nn.Module):
     def phi(self, xs):
         return self._encode_base(xs, self.enc.phi)
 
+    #WARNING: get_M is not directly used in the decoding process.
+    #M is always computed in self.dynamics_model
     def get_M(self, xs):
         dyn_fn = self.dynamics_fn(xs)
         Mstar = dyn_fn.M
@@ -149,6 +156,64 @@ class SeqAELSTSQ(nn.Module):
             return x_preds, losses
         else:
             return x_preds
+
+class SeqAELSTSQ_inner(SeqAELSTSQ):
+    def __init__(
+            self,
+            dim_a,
+            dim_m,
+            ch_x=3,
+            k=1.0,
+            alignment=False,
+            kernel_size=3,
+            predictive=True,
+            bottom_width=4,
+            n_blocks=3,
+            t_c=2,
+            dmode='default',
+            mnet_mlp=False,
+            detachM=0,
+            normalize=3,
+            change_of_basis=False,
+            inner_args={},
+            **kwargs):
+        super(SeqAELSTSQ, self).__init__()
+        self.dim_a = dim_a
+        self.dim_m = dim_m
+        self.predictive = predictive
+        self.alignment = alignment
+        self.dmode = dmode
+        self.initial_scale_M = 0.01
+        self.normalize = normalize
+        self.inner_args = inner_args
+        self.inner_args['dim_a'] = dim_a
+        self.detachM = detachM
+        self.enc = ResNetEncoder(
+            dim_a * dim_m, k=k, kernel_size=kernel_size, n_blocks=n_blocks)
+        self.t_c = t_c
+        #self.M_net = mnet.Meta_Mnet(**self.inner_args)
+
+
+        '''
+        Use the nonparametric M_net/ exact that computes the argmin 
+        over the loop given a set of H := (n, t, s, a) 
+        This nonparameteric M_net outputs the set of matrices (n, a, a) 
+        '''
+
+        self.dec = ResNetDecoder(
+            ch_x, k=k, kernel_size=kernel_size, n_blocks=n_blocks,
+            bottom_width=bottom_width)
+
+        self.dynamics_model = LinearTensorDynamicsLSTSQ_inner(alignment=alignment,
+                                                              inner_args=self.inner_args)
+
+        if change_of_basis:
+            self.change_of_basis = nn.Parameter(
+                torch.empty(dim_a, dim_a))
+            nn.init.eye_(self.change_of_basis)
+
+
+
 
 
 #iResNet class for So3 use

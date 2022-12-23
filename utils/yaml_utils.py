@@ -3,6 +3,7 @@ import sys
 import functools
 import argparse
 import yaml
+import copy
 import pdb
 sys.path.append('../')
 sys.path.append('./')
@@ -83,3 +84,20 @@ def parse_args():
     conf_dicts = [yaml.load(fp) for fp in args.infiles]
     config = make_config(conf_dicts, args.attrs)
     return config, args
+
+
+'''
+altering the config
+'''
+
+def alter_config(config, alteration):
+    config_two = copy.deepcopy(config)
+    for key in alteration.keys():
+        module, new_value = key, alteration[key]
+        keys = module.split('.')
+        target = functools.reduce(dict.__getitem__, keys[:-1], config_two)
+        if keys[-1] in target.keys():
+            target[keys[-1]] = yaml.safe_load(new_value)
+        else:
+            raise ValueError('The following key is not defined in the config file:{}', keys)
+    return config_two

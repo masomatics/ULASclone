@@ -181,6 +181,7 @@ def obtain_pair_sequences(checkmodelpath, size=30, seed=0, T=30):
     config = nu.load_config(checkmodelpath)
     data_args = config['train_data']['args']
     data_args['T'] = T
+
     double_dat = sm.SequentialMNIST_double(**data_args)
     np.random.seed(seed)
     picked = np.random.choice(len(double_dat.data), size)
@@ -307,8 +308,7 @@ def move_partial_onestep(selections, H, M, partitions, part_idx,
 
     for k in range(len(selections)):
         selection = selections[k]
-
-        if dim1treatment == True and len(selection) == 1:
+        if (dim1treatment == True and len(selection) == 1) or partitions is None:
             part= list(range(Hcopy.shape[0]))
         else:
             partition = partitions[k]
@@ -339,9 +339,12 @@ def assign(mat, submat, rows, cols):
     return mat
 
 
+'''
+multi step version of the move_partial_onestep
+'''
 def move_partial(selections, H, M, partitions, part_idx, T, dim1treatment=False):
     Hs = [H]
-    H_old = H
+    H_old = copy.deepcopy(H)
     for k in range(T):
         Hnew = move_partial_onestep(selections, H_old, M, partitions, part_idx,
                                     dim1treatment=dim1treatment)
@@ -352,3 +355,13 @@ def move_partial(selections, H, M, partitions, part_idx, T, dim1treatment=False)
     return Hs
 
 
+
+def repeat_apply(H, M, T):
+    Hs = [H]
+    H_old = copy.deepcopy(H)
+    for k in range(T):
+        Hnew = H_old @ M
+        Hs.append(Hnew)
+        H_old = Hnew
+    Hs = torch.stack(Hs)
+    return Hs
