@@ -120,6 +120,7 @@ class SeqAELSTSQ(nn.Module):
     def __call__(self, xs_cond, return_reg_loss=False, n_rolls=1, fix_indices=None, reconst=False,
                  regconfig = {}):
         # Encoded Latent. Num_ts x len_ts x  dim_m x dim_a
+
         H = self.encode(xs_cond)
 
         # ==Esitmate dynamics==  M IS APPLIED HERE

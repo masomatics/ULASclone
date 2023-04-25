@@ -126,6 +126,7 @@ class SequentialMNIST():
             color_t = (0.5 * color_a * t**2 + t * color_v + color_0) % 1
             mat = get_RTmat(0, 0, float(angles_t), 32, 32, pos_t[0], pos_t[1])
             _image = cv2.warpPerspective(image.copy(), mat, (32, 32))
+            
 
             rgb = np.asarray(colorsys.hsv_to_rgb(color_t[0], 1, 1), dtype=np.float32)
             _image = np.concatenate(
@@ -137,8 +138,11 @@ class SequentialMNIST():
                 _image = torch.tensor(
                     _image) + self.backgrnd_data[i].permute([1, 2, 0]) * (_imagemask)
                 _image = np.array(torch.clip(_image, max=1.))
-
-            images.append(self.transforms(_image.astype(np.float32)))
+            
+            images.append(torch.tensor(_image.astype(np.float32)))
+            
+            #THIS IMAGE IS NOT PIL IMAGE ANYMORE, why apply this??? Torchvision shape problem
+            #images.append(self.transforms(_image.astype(np.float32)))
 
         if self.label or self.label_velo:
             ret = [images]

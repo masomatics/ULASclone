@@ -1,9 +1,9 @@
-torch==1.10.0
-pytorch-pfn-extras
-scikit-image
-opencv-python
-pytorch_pfn_extras
-moviepy
-ffmpeg-python
+torch
 einops
-tqdm
+plotnine
+timm
+pyrootutils
+torch_tb_profiler
+pfio
+opencv-python
+scikit-image

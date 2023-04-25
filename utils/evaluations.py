@@ -67,7 +67,8 @@ def predict(images, model,
 def prediction_evaluation(targdir_pathlist, device =0,
                            n_cond=2, tp=1, repeats=3,
                            predictive=False,reconstructive = False,
-                          alteration={}):
+                          alteration={}, 
+                          mode='default'):
     results = {}
     inferred_Ms = {}
     model_configs = {}
@@ -76,7 +77,6 @@ def prediction_evaluation(targdir_pathlist, device =0,
 
     for targdir_path in targdir_pathlist:
 
-        Mlist = []
         if os.path.exists(os.path.join(targdir_path, 'config.yml')):
             config = nu.load_config(targdir_path)
         else:
@@ -125,12 +125,17 @@ def prediction_evaluation(targdir_pathlist, device =0,
             with torch.no_grad():
                 l2scores = []
                 for j in range(repeats):
+                    Mlist = []
                     for images in tqdm(train_loader):
                         if type(images) == list:
                             images = torch.stack(images)
                             images = images.transpose(1, 0)
                         # n t c w h
                         images = images.to(device)
+
+                        if mode == 'notebook':
+                            images = images.permute([0, 1, -1, 2, 3])
+
                         if predictive == True or reconstructive == True:
                             images_target = images
                         else:
@@ -147,6 +152,7 @@ def prediction_evaluation(targdir_pathlist, device =0,
                         Mlist.append(M.detach().to('cpu'))
 
                     Mlist = torch.cat(Mlist)
+
 
             l2scores = torch.cat(l2scores)
             av_l2 = torch.mean(l2scores, axis=0)
@@ -214,7 +220,6 @@ def equiv_evalutation(targdir_pathlist, device =0,
     inferred_Ms = {}
     for targdir_path in targdir_pathlist:
 
-        Mlist = []
         if os.path.exists(os.path.join(targdir_path, 'config.yml')):
             config = nu.load_config(targdir_path)
         else:
@@ -259,6 +264,7 @@ def equiv_evalutation(targdir_pathlist, device =0,
                 l2scores = []
 
                 for j in range(repeats):
+                    Mlist = []
                     for images in tqdm(train_loader):
 
                         if type(images) == list:
@@ -280,7 +286,6 @@ def equiv_evalutation(targdir_pathlist, device =0,
                         Mlist.append(M)
 
                         train_loader.dataset.init_shared_transition_parameters()
-
 
             Mlist = torch.cat(Mlist)
             scores = torch.cat(l2scores)

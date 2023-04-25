@@ -17,6 +17,7 @@ def load_module(fn, name):
 
 
 def load_component(config):
+    print(config['fn'])
     class_fn = load_module(config['fn'], config['name'])
     return class_fn(**config['args']) if 'args' in config.keys() else class_fn()
 

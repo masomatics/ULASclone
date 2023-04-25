@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 import pytorch_pfn_extras as ppe
 from pytorch_pfn_extras.training import extensions
 from utils import yaml_utils as yu
+from utils import evaluations_tf as et
 import pdb
 
 def train(config):
@@ -32,6 +33,7 @@ def train(config):
 
     # Dataaset
     data = yu.load_component(config['train_data'])
+
     train_loader = DataLoader(
         data, batch_size=config['batchsize'], shuffle=True, num_workers=config['num_workers'])
 
@@ -53,6 +55,7 @@ def train(config):
             ['epoch', 'iteration', 'train/loss', 'train/loss_bd', 'train/loss_orth', 'train/loss_comm', 'train/loss_inv', 'train/loss_latent', 'train/loss_obs', 'elapsed_time']),
         trigger=(config['report_freq'], 'iteration'))
     manager.extend(extensions.LogReport(
+        writer=ppe.writing.TensorBoardWriter(out_dir=config['log_dir']),
         trigger=(config['report_freq'], 'iteration')))
     manager.extend(
         extensions.snapshot(
@@ -108,3 +111,5 @@ if __name__ == '__main__':
 
     # Training
     train(config)
+    et.write_tf(config['log_dir'], root='')
+

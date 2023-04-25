@@ -1,7 +1,7 @@
 version=0
 LOGDIR_ROOT=/mnt/nfs-mnj-hot-02/tmp/masomatics/block_diag/result
 
-
+echo HOGE
 #Parts to change
 projname=ULASclone
 date=20230120

@@ -118,6 +118,3 @@ def get_predict(targdir_path, images, swap=False, predictive=False,
         return x_next,M
     else:
         return 0, 0
-
-
-

@@ -21,8 +21,12 @@ def loop_seqmodel(manager, model, optimizer, train_loader, config, device):
                 if type(images) == list:
                     images = torch.stack(images)
                     images = images.transpose(1, 0)
+                images = images.permute([0, 1, -1, 2, 3])
+
                 images = images.to(device)
+
                 regconfig = config['reg']
+
                 #loss,  (loss_bd, loss_orth, loss_comm) = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst)
                 loss,  loss_dict = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst, regconfig=regconfig)
 
