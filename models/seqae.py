@@ -107,9 +107,6 @@ class SeqAELSTSQ(nn.Module):
                        n_rolls=xs.shape[1] - T_cond, reconst=reconst, regconfig=regconfig)
         if return_reg_loss:
             xs_pred, reg_losses = xs_pred
-            reg_losses = {'reg_bd': reg_losses[0],
-                      'reg_orth': reg_losses[1],
-                      'loss_internal': reg_losses[2]}
             #losses = (loss_bd(dyn_fn.M, self.alignment),
             #          loss_orth(dyn_fn.M), loss_internal_T)
         if reconst:
@@ -330,9 +327,6 @@ class SeqAEHOLSTSQ(SeqAELSTSQ):
         if return_reg_loss:
             # fn is a map by M_star. Loss is the training external loss
             fn, Ms, losses = ret
-            losses = {'reg_bd': losses[0],
-                      'reg_orth': losses[1],
-                      'loss_internal': losses[2]}
         else:
             fn, Ms = ret
 
@@ -552,13 +546,13 @@ class SeqAENeuralM(SeqAELSTSQ):
 
         if return_reg_loss:
             losses = {}
-            losses['reg_bd'] = dynamics_models.loss_bd(fn.M, self.alignment) if regconfig['reg_bd'] == 'None' else 0
+            losses['reg_bd'] = dynamics_models.loss_bd(fn.M, self.alignment) if regconfig['reg_bd'] != 'None' else 0
 
-            losses['reg_orth'] = dynamics_models.loss_orth(fn.M) if regconfig['reg_orth'] == 'None' else 0
+            losses['reg_orth'] = dynamics_models.loss_orth(fn.M) if regconfig['reg_orth'] != 'None' else 0
 
-            losses['reg_comm'] = self.M_commutability(fn.M) if regconfig['reg_comm'] == 'None' else 0
+            losses['reg_comm'] = self.M_commutability(fn.M) if regconfig['reg_comm'] != 'None' else 0
 
-            losses['reg_inv'] = self.M_algebraic_inv(M, H) if regconfig['reg_inv'] == 'None' else 0
+            losses['reg_inv'] = self.M_algebraic_inv(M, H) if regconfig['reg_inv'] != 'None' else 0
             return x_preds, losses
         else:
             return x_preds

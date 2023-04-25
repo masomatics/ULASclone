@@ -102,8 +102,11 @@ class LinearTensorDynamicsLSTSQ(nn.Module):
 
         # M_star is returned in the form of module, not the matrix
         if return_loss:
-            losses = (loss_bd(dyn_fn.M, self.alignment),
-                      loss_orth(dyn_fn.M), loss_internal_T)
+            # losses = (loss_bd(dyn_fn.M, self.alignment),
+            #           loss_orth(dyn_fn.M), loss_internal_T)
+            losses = {'reg_bd': loss_bd(dyn_fn.M, self.alignment),
+            'reg_orth': loss_orth(dyn_fn.M) ,
+            'loss_internal': loss_internal_T}
             return dyn_fn, losses
         else:
             return dyn_fn

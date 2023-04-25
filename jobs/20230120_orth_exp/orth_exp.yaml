@@ -9,8 +9,12 @@ T_cond: 2
 T_pred: 1
 lr: 0.0003
 reg:
+  reg_comm:
   reg_bd:
-  reg_orth:
+  reg_inv:
+  reg_orth: 0.01 and 0.001 and 0.0001
+  reg_latent:
+  reg_obs:
 
 train_data:
   fn: ./datasets/seq_mnist.py
@@ -25,27 +29,29 @@ train_data:
     max_color_velocity_ratio: [-0.5, 0.5]
     only_use_digit4: True
     backgrnd: False
-    pair_transition: False
-    same_object: False
-    fixpos: True
+
 
 model:
   fn: ./models/seqae.py
-  name: SeqAELSTSQ
+  name: SeqAENeuralM
   args:
     dim_m: 256
     dim_a: 16
     ch_x: 3
     k: 2.
-    predictive: True
-    detachM: 0
+    dmode: default
+    mnet_mlp: 0
+    predictive:
+    normalize:
+
+
 
 training_loop:
   fn: ./training_loops.py
   name: loop_seqmodel
   args:
     lr_decay_iter: 40000
-    reconst_iter: 0
+    reconst_iter: 50000
 
 
 

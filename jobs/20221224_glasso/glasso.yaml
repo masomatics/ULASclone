@@ -1,9 +1,9 @@
 batchsize: 32
 seed: 1
-max_iteration: 50000
+max_iteration: 100000
 report_freq: 1000
-model_snapshot_freq: 10000
-manager_snapshot_freq: 50000
+model_snapshot_freq: 100000
+manager_snapshot_freq: 100000
 num_workers: 2
 T_cond: 2
 T_pred: 1
@@ -14,10 +14,10 @@ reg:
 
 train_data:
   fn: ./datasets/seq_mnist.py
-  name: SequentialMNIST
+  name: SequentialMNIST_double
   args:
     #root: /tmp/datasets/MNIST
-    root: /mnt/nfs-mnj-hot-02/tmp/masomatics/block_diag/datasets/MNIST
+    root: /mnt/nfs-mnj-hot-01/tmp/masomatics/block_diag/datasets/MNIST
     train: True
     T: 3
     max_T: 9
@@ -31,14 +31,23 @@ train_data:
 
 model:
   fn: ./models/seqae.py
-  name: SeqAELSTSQ
+  name: SeqAELSTSQ_inner
   args:
     dim_m: 256
-    dim_a: 16
+    dim_a: 6
     ch_x: 3
     k: 2.
     predictive: True
     detachM: 0
+    inner_args:
+      normalize: 0
+      batchsize: 32
+      num_loops: 40
+      detach: 1
+      beta: 0
+      temperature: 1
+      mode: glasso and exact
+      lr: 0.1 and 0.05
 
 training_loop:
   fn: ./training_loops.py

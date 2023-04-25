@@ -127,8 +127,7 @@ class SequentialMNIST():
             mat = get_RTmat(0, 0, float(angles_t), 32, 32, pos_t[0], pos_t[1])
             _image = cv2.warpPerspective(image.copy(), mat, (32, 32))
 
-            rgb = np.asarray(colorsys.hsv_to_rgb(
-                color_t, 1, 1), dtype=np.float32)
+            rgb = np.asarray(colorsys.hsv_to_rgb(color_t[0], 1, 1), dtype=np.float32)
             _image = np.concatenate(
                 [_image[:, :, None]] * 3, axis=-1) * rgb[None, None]
             _image = _image / 255.
@@ -328,27 +327,18 @@ class SequentialMNIST_double(SequentialMNIST):
         else:
             first_idx = self.first_indices[i]
             second_idx = self.second_indices[i]
-        if self.pair_transition != True:
 
-            # first_idx = np.random.choice(len(self.data), 1)[0]
-            # second_idx = np.random.choice(len(self.data), 1)[0]
 
-            pos0, pos1= self.initial_poss()
-            params0 = self.otain_action_parameters(pos0[0], pos1[0])
-            params1 = self.otain_action_parameters(pos0[1], pos1[1])
+        pos0, pos1 = self.pairpos0, self.pairpos1
+        params0 = self.otain_action_parameters(pos0[0], pos1[0])
 
-        else:
+        params1 = copy.deepcopy(params0)
+        params1['pos0'], params1['pos1'] = pos0[1], pos1[1]
+        params1['pos_v'] = params0['pos_v']
 
-            pos0, pos1 = self.pairpos0, self.pairpos1
-            params0 = self.otain_action_parameters(pos0[0], pos1[0])
-
-            params1 = copy.deepcopy(params0)
-            params1['pos0'], params1['pos1'] = pos0[1], pos1[1]
-            params1['pos_v'] = params0['pos_v']
-
-            angle_0 = self.rng.uniform(0, 2 * math.pi, size=1)
-            color_0 = self.rng.uniform(0, 1, size=1)
-            params1['angles_0'], params1['color_0'] = angle_0, color_0
+        angle_0 = self.rng.uniform(0, 2 * math.pi, size=1)
+        color_0 = self.rng.uniform(0, 1, size=1)
+        params1['angles_0'], params1['color_0'] = angle_0, color_0
 
         if mode == 1:
             images0 = self.get_image(first_idx, **params0)

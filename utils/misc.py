@@ -7,6 +7,22 @@ import  pdb
 
 from scipy.linalg import orth
 
+
+def distmat(ztensor , dist_mode = 'l2'):
+    #expect the ztensor to be of form
+    #(n, s, a)    (t part is gone)
+    if dist_mode == 'l2':
+        pass
+
+    elif dist_mode == 'innerp':
+        pass
+    else:
+        raise NotImplementedError
+    pass
+
+
+
+
 def get_orthmat(d, s):
     orthmat = torch.empty(3,2)
     while orthmat.shape[0] != orthmat.shape[1]:
@@ -91,12 +107,12 @@ def scale_specnorm(linlayer, const):
 
 
 def create_reportdict(loss , loss_dict):
-    report_dict = {'train/loss' : loss.item}
+    report_dict = {'train/loss' : torch.tensor(loss).item}
 
     for key in list(loss_dict.keys()):
         lossname = key.split('_')[-1]
         keyname = f"""train/loss_{lossname}"""
-        report_dict[keyname] = loss_dict[key].item()
+        report_dict[keyname] = torch.tensor(loss_dict[key]).item()
     return report_dict
 
     #

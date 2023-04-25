@@ -25,6 +25,7 @@ def loop_seqmodel(manager, model, optimizer, train_loader, config, device):
                 regconfig = config['reg']
                 #loss,  (loss_bd, loss_orth, loss_comm) = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst)
                 loss,  loss_dict = model.loss(images,  T_cond=config['T_cond'], return_reg_loss=True, reconst=reconst, regconfig=regconfig)
+
                 optimizer.zero_grad()
                 # comm_const = regconfig['reg_comm'] if regconfig['reg_comm'] != 'None' else 0
                 # inv_const = regconfig['reg_inv'] if regconfig['reg_inv'] != 'None' else 0

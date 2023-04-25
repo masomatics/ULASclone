@@ -1,4 +1,7 @@
-LOGDIR_ROOT=/mnt/nfs-mnj-hot-01/tmp/masomatics/block_diag/result
+
+
+
+LOGDIR_ROOT=/mnt/nfs-mnj-hot-02/tmp/masomatics/block_diag/result
 result_dirname=20220615_default_run_mnist
 dataset_name=mnist
 model_name=lstsq
