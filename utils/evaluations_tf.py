@@ -48,7 +48,7 @@ def write_tf(targdir, root='/mnt/vol21/masomatics/result/ulas'):
 
     writer = SummaryWriter(log_dir=targdir_path)
 
-    tp=18
+    tp=13
 
     Mlist = []
     config = nu.load_config(targdir_path)
@@ -56,6 +56,8 @@ def write_tf(targdir, root='/mnt/vol21/masomatics/result/ulas'):
 
     dataconfig = config['train_data']
     dataconfig['args']['T'] = config['T_cond'] + tp
+    dataconfig['args']['train'] = False
+
 
     data = yu.load_component(dataconfig)
     train_loader = DataLoader(
@@ -109,7 +111,7 @@ def writer_images(train_loader, model, config, device, tp, writer):
 
     allimages = []
 
-    num_imgs = 5
+    num_imgs = 7
     for check_idx in range(0,num_imgs-1):
         allimages.append(xs_pred[check_idx])
         allimages.append(xs_target[check_idx])
@@ -124,8 +126,19 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--targdir', type=str)
+    parser.add_argument('--all', type=int, default=0)
+    parser.add_argument('--root', type=str, default='/mnt/vol21/masomatics/result/ulas')
+
 
     args = parser.parse_args()
 
-    write_tf(args.targdir)
+    if args.all == 0:
+        write_tf(args.targdir)
+    else:
+        dirlist = os.listdir(os.path.join(args.root, args.targdir))
+        for subdir in dirlist:
+            targpath = os.path.join(args.targdir,subdir)
+            write_tf(targpath, root=args.root)
+
+    #write_tf(args.targdir)
 

@@ -7,3 +7,4 @@ torch_tb_profiler
 pfio
 opencv-python
 scikit-image
+defisheye

@@ -113,6 +113,7 @@ class SeqAELSTSQ(nn.Module):
             xs_target = xs
         else:
             xs_target = xs[:, T_cond:] if self.predictive else xs[:, 1:]
+
         loss = torch.mean(
             torch.sum((xs_target - torch.sigmoid(xs_pred)) ** 2, axis=[2, 3, 4]))
         return (loss, reg_losses) if return_reg_loss else loss
@@ -142,6 +143,7 @@ class SeqAELSTSQ(nn.Module):
             H_preds = [H[:, :1]] if reconst else []
             array = np.arange(xs_cond.shape[1] + n_rolls - 1)
 
+        #repeated application of prediction
         for _ in array:
             H_last = fn(H_last)
             H_preds.append(H_last)

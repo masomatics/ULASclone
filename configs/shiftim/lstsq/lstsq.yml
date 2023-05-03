@@ -1,0 +1,47 @@
+batchsize: 32
+seed: 1
+max_iteration: 50000
+report_freq: 1000
+model_snapshot_freq: 10000
+manager_snapshot_freq: 50000
+num_workers: 2
+T_cond: 2
+T_pred: 1
+lr: 0.0003
+reg:
+  reg_bd:
+  reg_orth:
+
+train_data:
+  fn: ./datasets/shift_img.py
+  name: Shift_cifar
+  args:
+    #root: /tmp/datasets/MNIST
+    root: /mnt/vol21/hayasick/data/
+    train: True
+    T: 3
+    max_T: 9
+    max_vshift: [-5, 5]
+    max_hshift: [-5, 5]
+    deform: True
+
+model:
+  fn: ./models/seqae.py
+  name: SeqAELSTSQ
+  args:
+    dim_m: 256
+    dim_a: 16
+    ch_x: 3
+    k: 2.
+    predictive: True
+    detachM: 0
+
+training_loop:
+  fn: ./training_loops.py
+  name: loop_seqmodel
+  args:
+    lr_decay_iter: 40000
+    reconst_iter: 0
+
+
+

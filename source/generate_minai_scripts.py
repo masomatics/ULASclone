@@ -150,7 +150,7 @@ def generate_scripts() :
             lastcommand = ''
 
             if args.mode == 'minai':
-                attr_list[k] = f"""python minai_workflow.py --option "{attr_list[k]}" | kubectl create -f -"""
+                attr_list[k] = f"""python new_minai_workflow.py --option "{attr_list[k]}" | kubectl create -f -"""
 
             elif args.mode == 'minai_debug':
                 attr_list[k] = f"""python minai_workflow.py --option "{attr_list[k]}" """
